@@ -1,6 +1,6 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -16,23 +16,24 @@ model User {
   status    String   @default("offline")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  messages    Message[]
-  channels    Channel[]    @relation("ChannelMembers")
+
+  messages      Message[]
+  channels      Channel[]  @relation("ChannelMembers")
   ownedChannels Channel[]  @relation("ChannelOwner")
+  Reaction      Reaction[]
 }
 
 model Channel {
-  id          String   @id @default(uuid())
-  name        String
-  isPrivate   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  ownerId     String
-  owner       User     @relation("ChannelOwner", fields: [ownerId], references: [id])
-  members     User[]   @relation("ChannelMembers")
-  messages    Message[]
+  id        String   @id @default(uuid())
+  name      String
+  isPrivate Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownerId  String
+  owner    User      @relation("ChannelOwner", fields: [ownerId], references: [id])
+  members  User[]    @relation("ChannelMembers")
+  messages Message[]
 }
 
 model Message {
@@ -40,12 +41,26 @@ model Message {
   content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User       @relation(fields: [userId], references: [id])
   channelId String
-  channel   Channel  @relation(fields: [channelId], references: [id])
+  channel   Channel    @relation(fields: [channelId], references: [id])
   threadId  String?
-  thread    Message? @relation("ThreadMessages", fields: [threadId], references: [id])
-  replies   Message[] @relation("ThreadMessages")
-} 
+  thread    Message?   @relation("ThreadMessages", fields: [threadId], references: [id])
+  replies   Message[]  @relation("ThreadMessages")
+  reactions Reaction[]
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  emoji     String
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User    @relation(fields: [userId], references: [id])
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id])
+
+  @@unique([userId, messageId, emoji])
+}

@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/error.middleware';
 import messageRoutes from './routes/message.routes';
 import channelRoutes from './routes/channel.routes';
 import threadRoutes from './routes/thread.routes';
+import reactionRoutes from './routes/reaction.routes';
 
 const app = express();
 const httpServer = createServer(app);
@@ -26,6 +27,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/messages', messageRoutes);
+app.use('/api/messages', reactionRoutes);
 app.use('/api/channels', channelRoutes);
 app.use('/api/threads', threadRoutes);
 

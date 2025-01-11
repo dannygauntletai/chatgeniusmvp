@@ -8,11 +8,11 @@ export interface Message {
   userId: string;
   channelId: string;
   threadId?: string;
-  user: User;
-  _count?: {
-    replies: number;
+  user: {
+    id: string;
+    username: string;
   };
-  lastReply?: Message;
+  reactions: Record<string, Array<{ id: string; username: string }>>;
 }
 
 export interface MessageInput {

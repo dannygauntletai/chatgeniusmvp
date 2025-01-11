@@ -1,0 +1,37 @@
+model User {
+  id        String    @id @default(uuid())
+  username  String    @unique
+  password  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  channels  Channel[] @relation("ChannelMembers")
+  owned     Channel[] @relation("ChannelOwner")
+  messages  Message[]
+  reactions Reaction[]
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  channelId String
+  channel   Channel  @relation(fields: [channelId], references: [id])
+  threadId  String?
+  emojis    Json     @default("{}")
+  reactions Reaction[]
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  emoji     String
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id])
+
+  @@unique([userId, messageId, emoji])
+} 
