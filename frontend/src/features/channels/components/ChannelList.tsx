@@ -78,34 +78,20 @@ export const ChannelList = () => {
     }
   };
 
-  if (loading) return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 border-b flex justify-between items-center">
-        <h2 className="text-lg font-semibold">Channels</h2>
-        <button
-          disabled
-          className="text-sm px-2 py-1 bg-primary text-white rounded opacity-50 cursor-not-allowed"
-        >
-          Create
-        </button>
-      </div>
-      <div className="p-4">Loading channels...</div>
-    </div>
-  );
-  if (error) return <div className="p-4 text-red-500">{error}</div>;
-
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b flex justify-between items-center">
         <h2 className="text-lg font-semibold">Channels</h2>
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="text-sm px-2 py-1 bg-primary text-white rounded hover:bg-primary-dark"
+          disabled={loading}
+          className={`text-sm px-2 py-1 bg-primary text-white rounded hover:bg-primary-dark ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           Create
         </button>
       </div>
       <div className="flex-1 overflow-y-auto">
+        {error && <div className="p-4 text-red-500">{error}</div>}
         {channels.map(channel => (
           <div 
             key={channel.id}
@@ -141,6 +127,9 @@ export const ChannelList = () => {
             </div>
           </div>
         ))}
+        {loading && channels.length === 0 && (
+          <div className="p-4 text-gray-500">Loading channels...</div>
+        )}
       </div>
       <CreateChannelModal
         isOpen={isCreateModalOpen}

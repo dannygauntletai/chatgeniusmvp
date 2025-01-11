@@ -30,8 +30,15 @@ export const CreateChannelModal = ({ isOpen, onClose }: CreateChannelModalProps)
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-      <div className="bg-white rounded-lg p-6 w-96">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onClick={onClose}
+      style={{ backdropFilter: 'blur(4px)' }}
+    >
+      <div 
+        className="bg-white rounded-lg p-6 w-96 relative"
+        onClick={e => e.stopPropagation()}
+      >
         <h2 className="text-xl font-bold mb-4">Create Channel</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
