@@ -11,15 +11,56 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export interface FileObject {
+  id: string;
   name: string;
-  size: number;
   type: string;
+  size: number;
   url: string;
-  created_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export class FileService {
-  static async uploadFile(file: File) {
+class FileService {
+  async listFiles(): Promise<FileObject[]> {
+    try {
+      const { data, error } = await supabase.storage
+        .from(BUCKET_NAME)
+        .list('uploads');
+
+      if (error) {
+        throw error;
+      }
+
+      const files = await Promise.all(
+        data.map(async (file) => {
+          const { data: urlData } = supabase.storage
+            .from(BUCKET_NAME)
+            .getPublicUrl(`uploads/${file.name}`);
+
+          const originalName = file.name.replace(/^\d+-/, '').replace(/_/g, ' ');
+
+          return {
+            id: file.id,
+            name: originalName,
+            size: file.metadata?.size || 0,
+            type: file.metadata?.mimetype || 'application/octet-stream',
+            url: urlData.publicUrl,
+            createdAt: file.created_at,
+            updatedAt: file.updated_at || file.created_at,
+          };
+        })
+      );
+
+      return files.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    } catch (error) {
+      console.error('Error listing files:', error);
+      throw error;
+    }
+  }
+
+  async uploadFile(file: File): Promise<FileObject> {
     try {
       const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const timestamp = Date.now();
@@ -39,11 +80,13 @@ export class FileService {
         .getPublicUrl(filePath);
 
       return {
-        url: urlData.publicUrl,
+        id: data.id,
         name: file.name,
-        size: file.size,
         type: file.type,
-        created_at: new Date().toISOString()
+        size: file.size,
+        url: urlData.publicUrl,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -51,44 +94,20 @@ export class FileService {
     }
   }
 
-  static async uploadFiles(files: File[]) {
-    return Promise.all(files.map(file => this.uploadFile(file)));
-  }
-
-  static async listFiles(): Promise<FileObject[]> {
+  async deleteFile(fileId: string): Promise<void> {
     try {
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from(BUCKET_NAME)
-        .list('uploads');
+        .remove([`uploads/${fileId}`]);
 
       if (error) {
         throw error;
       }
-
-      const files = await Promise.all(
-        data.map(async (file) => {
-          const { data: urlData } = supabase.storage
-            .from(BUCKET_NAME)
-            .getPublicUrl(`uploads/${file.name}`);
-
-          const originalName = file.name.replace(/^\d+-/, '').replace(/_/g, ' ');
-
-          return {
-            name: originalName,
-            size: file.metadata?.size || 0,
-            type: file.metadata?.mimetype || 'application/octet-stream',
-            url: urlData.publicUrl,
-            created_at: file.created_at
-          };
-        })
-      );
-
-      return files.sort((a, b) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
     } catch (error) {
-      console.error('Error listing files:', error);
+      console.error('Error deleting file:', error);
       throw error;
     }
   }
-} 
+}
+
+export const fileService = new FileService(); 

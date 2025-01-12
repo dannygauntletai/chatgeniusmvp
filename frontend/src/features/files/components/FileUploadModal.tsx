@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Modal } from '../../shared/components/Modal';
 import { useDropzone } from 'react-dropzone';
-import { FileService } from '../../../services/file.service';
+import { fileService } from '../../../services/file.service';
 import { LoadingSpinner } from '../../shared/components/LoadingSpinner';
 
 interface FileUploadModalProps {
@@ -42,7 +42,10 @@ export const FileUploadModal = ({ isOpen, onClose }: FileUploadModalProps) => {
     try {
       setIsUploading(true);
       setError(null);
-      await FileService.uploadFiles(files);
+      
+      // Upload files one by one
+      await Promise.all(files.map(file => fileService.uploadFile(file)));
+      
       setFiles([]);
       onClose();
     } catch (err) {
@@ -55,99 +58,79 @@ export const FileUploadModal = ({ isOpen, onClose }: FileUploadModalProps) => {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Upload Files">
-      <div className="p-4">
+      <div className="p-6">
         <div
           {...getRootProps()}
-          className={`border-2 border-dashed rounded-lg p-6 mb-4 text-center transition-colors
-            ${isDragActive 
-              ? 'border-primary bg-primary/5' 
-              : 'border-gray-300 hover:border-gray-400'}`}
+          className={`border-2 border-dashed rounded-lg p-6 text-center ${
+            isDragActive ? 'border-blue-500 bg-blue-50 bg-opacity-10' : 'border-gray-600'
+          }`}
         >
           <input {...getInputProps()} />
-          <div className="text-gray-500">
-            <svg
-              className="mx-auto h-12 w-12 mb-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-              />
-            </svg>
+          <svg
+            className="mx-auto h-12 w-12 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+            />
+          </svg>
+          <p className="mt-2 text-gray-300">
             {isDragActive ? (
-              <p className="text-primary">Drop the files here...</p>
+              'Drop the files here...'
             ) : (
               <>
-                <p>Drag and drop files here, or</p>
+                Drag and drop files here, or{' '}
                 <button
                   type="button"
+                  className="text-blue-500 hover:text-blue-400"
                   onClick={handleSelectClick}
-                  className="text-blue-500 hover:text-blue-600 font-medium mt-1 px-2 py-1 rounded hover:bg-gray-100"
                 >
-                  click to select files
+                  browse
                 </button>
               </>
             )}
-          </div>
+          </p>
         </div>
 
+        {/* File List */}
         {files.length > 0 && (
-          <div className="mb-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Selected Files:</h3>
-            <div className="space-y-2">
-              {files.map((file, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-2 bg-gray-50 rounded"
+          <div className="mt-4 space-y-2">
+            {files.map((file, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-2 bg-gray-700 rounded"
+              >
+                <span className="text-sm truncate flex-1">{file.name}</span>
+                <button
+                  onClick={() => removeFile(index)}
+                  className="ml-2 text-gray-400 hover:text-white"
                 >
-                  <div className="flex items-center space-x-2">
-                    <svg
-                      className="h-5 w-5 text-gray-400"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <span className="text-sm text-gray-600">{file.name}</span>
-                  </div>
-                  <button
-                    onClick={() => removeFile(index)}
-                    className="text-gray-400 hover:text-gray-500"
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
-        {error && (
-          <div className="text-red-500 text-sm mb-4">{error}</div>
-        )}
+        {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
-        <div className="flex justify-end gap-2">
+        <div className="mt-6 flex justify-end space-x-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-gray-600 hover:text-gray-800"
+            className="px-4 py-2 text-sm text-gray-300 hover:text-white"
           >
             Cancel
           </button>
@@ -155,15 +138,15 @@ export const FileUploadModal = ({ isOpen, onClose }: FileUploadModalProps) => {
             type="button"
             onClick={handleUpload}
             disabled={isUploading || files.length === 0}
-            className="min-w-[120px] px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="px-4 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
           >
             {isUploading ? (
               <>
-                <LoadingSpinner className="h-4 w-4" />
-                <span>Uploading</span>
+                <LoadingSpinner className="w-4 h-4 mr-2" />
+                Uploading...
               </>
             ) : (
-              'Upload Files'
+              'Upload'
             )}
           </button>
         </div>

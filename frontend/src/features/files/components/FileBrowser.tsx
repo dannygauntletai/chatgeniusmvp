@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { FileService, FileObject } from '../../../services/file.service';
+import { fileService, FileObject } from '../../../services/file.service';
 import { LoadingSpinner } from '../../shared/components/LoadingSpinner';
 
 const getFileIcon = (type: string) => {
@@ -47,7 +47,11 @@ const formatFileSize = (bytes: number) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
-export const FileBrowser = () => {
+interface FileBrowserProps {
+  selectedFileId?: string;
+}
+
+export const FileBrowser = ({ selectedFileId }: FileBrowserProps) => {
   const [files, setFiles] = useState<FileObject[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,9 +64,20 @@ export const FileBrowser = () => {
       } else {
         setLoading(true);
       }
-      const data = await FileService.listFiles();
+      const data = await fileService.listFiles();
       setFiles(data);
       setError(null);
+
+      // If there's a selected file, scroll it into view
+      if (selectedFileId) {
+        setTimeout(() => {
+          const element = document.getElementById(`file-${selectedFileId}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('ring-2', 'ring-blue-500');
+          }
+        }, 100);
+      }
     } catch (err) {
       setError('Failed to load files');
       console.error('Error loading files:', err);
@@ -70,7 +85,7 @@ export const FileBrowser = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [selectedFileId]);
 
   useEffect(() => {
     loadFiles();
@@ -139,8 +154,11 @@ export const FileBrowser = () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {files.map((file) => (
                 <div
+                  id={`file-${file.id}`}
                   key={file.url}
-                  className="group flex flex-col items-center p-4 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
+                  className={`group flex flex-col items-center p-4 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors ${
+                    selectedFileId === file.id ? 'ring-2 ring-blue-500' : ''
+                  }`}
                 >
                   <div className="relative w-full flex justify-center">
                     {getFileIcon(file.type)}
