@@ -13,10 +13,15 @@ interface ChannelMemberUpdate {
   };
 }
 
+interface UserStatuses {
+  [userId: string]: string;
+}
+
 export const DMList = () => {
   const [dms, setDms] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userStatuses, setUserStatuses] = useState<UserStatuses>({});
   const { activeChannel, setActiveChannel } = useChannel();
   const { userId } = useUserContext();
 
@@ -27,6 +32,16 @@ export const DMList = () => {
         const data = await ChannelService.getChannels();
         console.log('Loaded DMs:', data.directMessages);
         setDms(data.directMessages);
+
+        // Initialize user statuses
+        const initialStatuses: UserStatuses = {};
+        data.directMessages.forEach(dm => {
+          const otherMember = dm.members.find(member => member.id !== userId);
+          if (otherMember) {
+            initialStatuses[otherMember.id] = otherMember.status || 'offline';
+          }
+        });
+        setUserStatuses(initialStatuses);
         setError(null);
       } catch (err) {
         setError('Failed to load direct messages');
@@ -45,10 +60,20 @@ export const DMList = () => {
       }
     };
 
+    // Listen for user status changes
+    const handleStatusChange = ({ userId, status }: { userId: string; status: string }) => {
+      setUserStatuses(prev => ({
+        ...prev,
+        [userId]: status
+      }));
+    };
+
     socket.on('channel:created', handleNewChannel);
+    socket.on('user:status_changed', handleStatusChange);
 
     return () => {
       socket.off('channel:created', handleNewChannel);
+      socket.off('user:status_changed', handleStatusChange);
     };
   }, [userId]);
 
@@ -87,6 +112,8 @@ export const DMList = () => {
             return null;
           }
 
+          const status = userStatuses[otherMember.id] || 'offline';
+
           return (
             <div
               key={dm.id}
@@ -97,11 +124,18 @@ export const DMList = () => {
                   : 'hover:bg-gray-700'
               }`}
             >
-              <span className={`text-sm font-medium ${
-                activeChannel?.id === dm.id ? 'text-white' : 'text-white'
-              }`}>
-                {otherMember.username}
-              </span>
+              <div className="flex items-center space-x-2">
+                <div 
+                  className={`w-2 h-2 rounded-full ${
+                    status === 'online' ? 'bg-green-500' : 'bg-red-500'
+                  }`}
+                />
+                <span className={`text-sm font-medium ${
+                  activeChannel?.id === dm.id ? 'text-white' : 'text-white'
+                }`}>
+                  {otherMember.username}
+                </span>
+              </div>
             </div>
           );
         })}
