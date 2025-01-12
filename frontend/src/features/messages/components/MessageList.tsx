@@ -10,6 +10,14 @@ import { ThreadProvider } from '../../threads/context';
 import { ThreadView } from '../../threads/components/ThreadView';
 import { useThread } from '../../threads/context';
 
+const ChannelHeader = ({ name }: { name: string }) => (
+  <div className="h-14 flex items-center px-6 border-b border-gray-600 bg-gray-800">
+    <h2 className="text-lg font-medium text-white">
+      {name.startsWith('@') ? name : `#${name}`}
+    </h2>
+  </div>
+);
+
 const MessageListContent = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,35 +68,35 @@ const MessageListContent = () => {
   }, [activeChannel?.id]);
 
   if (!activeChannel) return <EmptyState message="Select a channel to start chatting" />;
-  if (loading) return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex-1 flex items-center justify-center">
-        <LoadingSpinner />
-      </div>
-    </div>
-  );
-  if (error) return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-red-500">{error}</div>
-      </div>
-    </div>
-  );
-  if (messages.length === 0) return <EmptyState message="No messages yet" />;
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      <div 
-        ref={messageListRef}
-        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 bg-gray-800"
-      >
-        <div className="flex flex-col min-h-full justify-end">
-          <div>
-            {messages.map(message => (
-              <MessageItem key={message.id} message={message} />
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
+    <div className="h-full flex">
+      <div className="flex-1 relative">
+        <ChannelHeader name={activeChannel.name} />
+        <div 
+          ref={messageListRef}
+          className="absolute inset-0 top-14 overflow-y-auto bg-gray-800"
+        >
+          {loading ? (
+            <div className="h-full flex items-center justify-center">
+              <LoadingSpinner />
+            </div>
+          ) : error ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-red-500">{error}</div>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <EmptyState message="No messages yet" />
+            </div>
+          ) : (
+            <div className="min-h-full flex flex-col justify-end">
+              {messages.map(message => (
+                <MessageItem key={message.id} message={message} />
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
         </div>
       </div>
       {isThreadOpen && activeThreadMessage && (
