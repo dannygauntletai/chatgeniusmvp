@@ -38,21 +38,14 @@ export const useThread = (messageId?: string, shouldLoad: boolean = false) => {
     }
   }, [messageId]);
 
-  const createThreadMessage = async (data: ThreadMessageInput) => {
-    try {
-      const message = await ThreadService.createThreadMessage(data);
-      return message;
-    } catch (error) {
-      setState(prev => ({
-        ...prev,
-        error: 'Failed to create thread message'
-      }));
-      throw error;
+  useEffect(() => {
+    if (shouldLoad && messageId) {
+      loadThreadMessages();
     }
-  };
+  }, [messageId, shouldLoad, loadThreadMessages]);
 
   useEffect(() => {
-    if (!socket || !messageId) return;
+    if (!messageId) return;
 
     const handleNewMessage = (message: Message) => {
       if (message.threadId === messageId) {
@@ -68,43 +61,45 @@ export const useThread = (messageId?: string, shouldLoad: boolean = false) => {
             }
           };
         });
-        // Set unread flag if the thread view is not active
-        if (!document.hasFocus()) {
-          setHasUnreadReplies(true);
-          // Show browser notification if permitted
-          if (Notification.permission === 'granted') {
-            new Notification('New Thread Reply', {
-              body: `${message.user.username}: ${message.content}`,
-            });
-          }
-        }
       }
     };
 
-    socket.on('thread:message_created', handleNewMessage);
+    socket.on('message:created', handleNewMessage);
+
     return () => {
-      socket.off('thread:message_created', handleNewMessage);
+      socket.off('message:created', handleNewMessage);
     };
-  }, [socket, messageId]);
+  }, [messageId]);
 
-  useEffect(() => {
-    if (messageId && shouldLoad) {
-      loadThreadMessages();
+  const createThreadMessage = async (data: ThreadMessageInput) => {
+    try {
+      const message = await ThreadService.createThreadMessage(data);
+      setState(prev => {
+        if (!prev.activeThread) return prev;
+        return {
+          ...prev,
+          activeThread: {
+            ...prev.activeThread,
+            replies: [...prev.activeThread.replies, message],
+            replyCount: prev.activeThread.replyCount + 1,
+            lastReply: message
+          }
+        };
+      });
+      return message;
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        error: 'Failed to create thread message'
+      }));
+      throw error;
     }
-  }, [messageId, shouldLoad, loadThreadMessages]);
-
-  // Request notification permission on mount
-  useEffect(() => {
-    if (Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
+  };
 
   return {
     ...state,
     hasUnreadReplies,
     createThreadMessage,
-    loadThreadMessages,
-    markAsRead: () => setHasUnreadReplies(false)
+    loadThreadMessages
   };
 }; 
