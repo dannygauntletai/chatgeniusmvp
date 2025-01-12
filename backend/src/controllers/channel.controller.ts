@@ -216,9 +216,15 @@ export class ChannelController {
     }
   }
 
-  static async getChannels(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  static async getChannels(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void | Response> {
     try {
-      const userId = req.auth.userId;
+      console.log('Getting channels for user:', req.auth?.userId);
+      
+      const userId = req.auth?.userId;
+      if (!userId) {
+        console.error('No userId found in auth');
+        return res.status(401).json({ message: 'User not authenticated' });
+      }
 
       // First, get all public channels
       const publicChannels = await prisma.channel.findMany({
@@ -237,6 +243,8 @@ export class ChannelController {
         }
       });
 
+      console.log('Found public channels:', publicChannels.length);
+
       // Check if user has any channel memberships (indicating they've logged in before)
       const existingMemberships = await prisma.channel.findMany({
         where: {
@@ -246,6 +254,8 @@ export class ChannelController {
         },
         select: { id: true }
       });
+
+      console.log('Found existing memberships:', existingMemberships.length);
 
       // Only auto-join public channels if this is the user's first login (no existing memberships)
       if (existingMemberships.length === 0) {
@@ -297,12 +307,13 @@ export class ChannelController {
         }
       });
 
-      res.json({
+      return res.json({
         channels,
         directMessages: dms
       });
     } catch (error) {
-      next(error);
+      console.error('Error in getChannels:', error);
+      return next(error);
     }
   }
 
