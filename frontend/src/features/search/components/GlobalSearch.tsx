@@ -37,8 +37,8 @@ export const GlobalSearch = ({ onOpenFileBrowser }: GlobalSearchProps) => {
 
   const handleSelect = (result: SearchResult) => {
     setOpen(false);
-    if (result.type === 'message') {
-      navigate(`/channels/${result.channelId}`, { state: { messageId: result.id } });
+    if (result.type === 'message' && result.metadata?.channelId) {
+      navigate(`/channels/${result.metadata.channelId}`, { state: { messageId: result.id } });
     } else if (result.type === 'file') {
       onOpenFileBrowser(result.id);
     }
@@ -97,7 +97,7 @@ export const GlobalSearch = ({ onOpenFileBrowser }: GlobalSearchProps) => {
                 {results.map((result) => (
                   <Command.Item
                     key={result.id}
-                    value={result.title}
+                    value={result.content}
                     onSelect={() => handleSelect(result)}
                     className="px-4 py-3 my-1 rounded hover:bg-gray-700 cursor-pointer"
                   >
@@ -113,12 +113,13 @@ export const GlobalSearch = ({ onOpenFileBrowser }: GlobalSearchProps) => {
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center space-x-2">
+                          <span className="text-xs text-gray-400 uppercase">{result.location}</span>
                           <span className="text-sm font-medium text-white truncate">
-                            {result.type === 'message' ? result.channelName : result.title}
+                            {result.content}
                           </span>
-                          {result.type === 'message' && (
+                          {result.type === 'message' && result.metadata?.timestamp && (
                             <span className="text-xs text-gray-400">
-                              {new Date(result.timestamp!).toLocaleDateString()}
+                              {new Date(result.metadata.timestamp).toLocaleDateString()}
                             </span>
                           )}
                         </div>
