@@ -34,7 +34,7 @@ export const MainLayout = ({ children }: { children: React.ReactNode }) => {
       <div className="w-64 bg-gray-800 flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-gray-800">
-          <h1 className="text-xl font-bold">Chat Genius</h1>
+          <h1 className="text-xl font-bold">ChatGenius v2</h1>
         </div>
 
         {/* Channels Section */}

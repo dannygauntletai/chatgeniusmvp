@@ -52,7 +52,6 @@ export const FileBrowser = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const loadFiles = useCallback(async (isRefresh = false) => {
     try {
@@ -75,33 +74,44 @@ export const FileBrowser = () => {
 
   useEffect(() => {
     loadFiles();
-
-    // Set up polling for updates every 5 seconds
-    const interval = setInterval(() => loadFiles(true), 5000);
-
-    return () => clearInterval(interval);
-  }, [loadFiles, refreshKey]);
+  }, [loadFiles]);
 
   const handleRefresh = () => {
-    setRefreshKey(prev => prev + 1);
     loadFiles(true);
   };
 
+  const handleDownload = async (file: FileObject) => {
+    try {
+      const response = await fetch(file.url);
+      if (!response.ok) throw new Error('Failed to download file');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Error downloading file:', err);
+    }
+  };
+
   return (
-    <div className="flex-1 flex flex-col bg-gray-800">
+    <div className="flex-1 flex flex-col bg-gray-800 h-[calc(100vh-200px)]">
       {/* Header */}
       <div className="p-4 border-b border-gray-700 flex justify-between items-center">
         <h2 className="text-lg font-semibold text-white">Files</h2>
         <button
           onClick={handleRefresh}
           disabled={refreshing}
-          className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-gray-700 transition-colors disabled:opacity-50 relative"
+          className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white rounded-full hover:bg-gray-700 transition-colors disabled:opacity-50"
           title="Refresh files"
         >
           {refreshing ? (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <LoadingSpinner />
-            </div>
+            <LoadingSpinner />
           ) : (
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -111,9 +121,9 @@ export const FileBrowser = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto relative">
         {loading && files.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center">
             <LoadingSpinner />
           </div>
         ) : error ? (
@@ -128,14 +138,22 @@ export const FileBrowser = () => {
           <div className="p-6">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {files.map((file) => (
-                <a
+                <div
                   key={file.url}
-                  href={file.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="group flex flex-col items-center p-4 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
                 >
-                  {getFileIcon(file.type)}
+                  <div className="relative w-full flex justify-center">
+                    {getFileIcon(file.type)}
+                    <button
+                      onClick={() => handleDownload(file)}
+                      className="absolute -top-2 -right-2 p-1 bg-gray-800 rounded-full text-gray-400 hover:text-white hover:bg-gray-900 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Download file"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
+                  </div>
                   <div className="mt-2 text-center">
                     <div className="text-sm font-medium text-white truncate w-full max-w-[150px]">
                       {file.name}
@@ -144,7 +162,7 @@ export const FileBrowser = () => {
                       {formatFileSize(file.size)}
                     </div>
                   </div>
-                </a>
+                </div>
               ))}
             </div>
           </div>
