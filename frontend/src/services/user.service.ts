@@ -13,5 +13,10 @@ export const UserService = {
   getUserById: async (userId: string): Promise<User> => {
     const response = await api.get(`/api/users/${userId}`);
     return response;
+  },
+
+  updateUserStatus: async (status: string): Promise<User> => {
+    const response = await api.put('/api/users/status', { user_status: status });
+    return response;
   }
 }; 

@@ -6,6 +6,7 @@ import { UserInviteModal } from '../features/users/components/UserInviteModal';
 import { CreateChannelModal } from '../features/channels/components/CreateChannelModal';
 import { FileUploadModal } from '../features/files/components/FileUploadModal';
 import { FileBrowser } from '../features/files/components/FileBrowser';
+import { UserStatusButton } from '../features/users/components/UserStatusButton';
 import { api } from '../services/api.service';
 import { socket, disconnectSocket } from '../services/socket.service';
 
@@ -73,10 +74,10 @@ export const MainLayout = ({ children }: { children: React.ReactNode }) => {
 
         {/* Footer with Upload and Sign Out */}
         <div className="p-4 border-t border-gray-600 space-y-2">
-          <div className="flex gap-2">
+          <div className="flex justify-around items-center">
             <button
               onClick={() => setIsFileUploadModalOpen(true)}
-              className="flex-1 px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-700 rounded flex items-center justify-center gap-2"
+              className="px-4 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-700 rounded flex items-center justify-center gap-2"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
@@ -85,7 +86,7 @@ export const MainLayout = ({ children }: { children: React.ReactNode }) => {
             </button>
             <button
               onClick={() => setIsFileBrowserOpen(!isFileBrowserOpen)}
-              className={`flex-1 px-4 py-2 text-sm rounded flex items-center justify-center gap-2 ${
+              className={`px-4 py-2 text-sm rounded flex items-center justify-center gap-2 ${
                 isFileBrowserOpen 
                   ? 'bg-gray-700 text-white' 
                   : 'text-gray-300 hover:text-white hover:bg-gray-700'
@@ -96,6 +97,7 @@ export const MainLayout = ({ children }: { children: React.ReactNode }) => {
               </svg>
               Files
             </button>
+            <UserStatusButton />
           </div>
           <button
             onClick={handleSignOut}

@@ -3,6 +3,7 @@ export interface User {
   username: string;
   email?: string;
   status?: string;
+  user_status?: string;
   createdAt: string;
   updatedAt: string;
 }
