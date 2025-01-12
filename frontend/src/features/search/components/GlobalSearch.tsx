@@ -63,7 +63,7 @@ export const GlobalSearch = ({ onOpenFileBrowser }: GlobalSearchProps) => {
       <Command.Dialog
         open={open}
         onOpenChange={setOpen}
-        label="Search"
+        label="Search messages and files"
       >
         <div className="fixed inset-0 z-50" aria-hidden="true">
           <div className="fixed inset-0 bg-gray-900/50" onClick={() => setOpen(false)} />
