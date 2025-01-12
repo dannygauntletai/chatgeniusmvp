@@ -48,7 +48,7 @@ const DashboardLayout = () => {
 
           // Connect socket with auth credentials
           connectSocket(session.id, sessionToken);
-          // Set user as online
+          // Set user as online only during initial connection
           socket.emit('status:update', 'online');
 
           // Schedule next refresh for 5 minutes before token expiry
@@ -78,8 +78,7 @@ const DashboardLayout = () => {
       if (refreshTimeout) {
         clearTimeout(refreshTimeout);
       }
-      // Set user as offline and disconnect socket when component unmounts
-      socket.emit('status:update', 'offline');
+      // Only disconnect socket, don't update status
       disconnectSocket();
     };
   }, [session]);

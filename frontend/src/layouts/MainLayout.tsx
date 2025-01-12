@@ -15,19 +15,18 @@ export const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const handleSignOut = async () => {
     try {
       // Set user as offline before signing out
-      await socket.emit('status:update', 'offline');
+      socket.emit('status:update', 'offline');
+      // Wait a brief moment for the status update to be sent
+      await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Disconnect socket
-      disconnectSocket();
-      
-      // Clear API token
-      localStorage.removeItem('authToken');
+      // Clear auth token and disconnect socket
       api.setAuthToken(null);
+      disconnectSocket();
       
       // Sign out from Clerk
       await signOut();
     } catch (error) {
-      console.error('Error during sign out:', error);
+      console.error('Error signing out:', error);
     }
   };
 
