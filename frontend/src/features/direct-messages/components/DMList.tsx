@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { socket } from '../../../services/socket.service';
 import { ChannelService } from '../../../services/channel.service';
@@ -8,72 +8,87 @@ import { Channel } from '../../../types/channel.types';
 interface ChannelMember {
   id: string;
   username: string;
+  user_status: string;
 }
 
 export const DMList = () => {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [userStatuses, setUserStatuses] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const loadingRef = useRef(false);
   const auth = useAuth();
   const { activeChannel, setActiveChannel } = useChannel();
   const userId = auth.userId;
 
-  useEffect(() => {
-    const loadChannels = async () => {
-      try {
-        const response = await ChannelService.getChannels();
-        setChannels(response.directMessages);
+  const loadChannels = useCallback(async (pageNum: number) => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
 
-        // Initialize user statuses
-        const initialStatuses: Record<string, string> = {};
-        response.directMessages.forEach((channel: Channel) => {
-          const otherMember = channel.members.find((member: ChannelMember) => member.id !== userId);
-          if (otherMember) {
-            initialStatuses[otherMember.id] = 'offline';
-          }
-        });
-        setUserStatuses(initialStatuses);
-      } catch (error) {
-        setError('Failed to load channels');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (userId) {
-      loadChannels();
-
-      // Listen for new DM channels
-      socket.on('channel:created', (channel: Channel) => {
-        if (channel.name.startsWith('dm-') && channel.members.some(m => m.id === userId)) {
-          setChannels(prev => [...prev, channel]);
-          
-          // Initialize status for the new DM user
-          const otherMember = channel.members.find(m => m.id !== userId);
-          if (otherMember) {
-            setUserStatuses(prev => ({
-              ...prev,
-              [otherMember.id]: 'offline'
-            }));
-          }
-        }
-      });
-
-      // Listen for user status updates
-      socket.on('user:status_updated', ({ userId: updatedUserId, status }: { userId: string; status: string }) => {
-        setUserStatuses(prev => ({
-          ...prev,
-          [updatedUserId]: status
-        }));
-      });
-
-      return () => {
-        socket.off('channel:created');
-        socket.off('user:status_updated');
-      };
+    try {
+      const response = await ChannelService.getChannels(pageNum);
+      const newChannels = response.directMessages;
+      
+      setChannels(prev => pageNum === 1 ? newChannels : [...prev, ...newChannels]);
+      setHasMore(newChannels.length === response.pagination.limit);
+      setError(null);
+    } catch (error) {
+      setError('Failed to load channels');
+    } finally {
+      setLoading(false);
+      loadingRef.current = false;
     }
-  }, [userId]);
+  }, []);
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop <= clientHeight * 1.5 && hasMore && !loadingRef.current) {
+      setPage(prev => prev + 1);
+    }
+  }, [hasMore]);
+
+  useEffect(() => {
+    if (userId && page) {
+      loadChannels(page);
+    }
+  }, [userId, page, loadChannels]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    // Listen for new DM channels
+    socket.on('channel:created', (channel: Channel) => {
+      if (channel.name.startsWith('dm-') && channel.members.some(m => m.id === userId)) {
+        setChannels(prev => [channel, ...prev]);
+      }
+    });
+
+    // Listen for channel updates
+    socket.on('channel:updated', (updatedChannel: Channel) => {
+      if (updatedChannel.name.startsWith('dm-')) {
+        setChannels(prev => 
+          prev.map(ch => ch.id === updatedChannel.id ? updatedChannel : ch)
+        );
+      }
+    });
+
+    // Listen for member left events
+    socket.on('channel:member_left', ({ channelId, userId: leftUserId }: { channelId: string; userId: string }) => {
+      if (leftUserId === userId) {
+        setChannels(prev => prev.filter(ch => ch.id !== channelId));
+        if (activeChannel?.id === channelId) {
+          setActiveChannel(null);
+        }
+      }
+    });
+
+    return () => {
+      socket.off('channel:created');
+      socket.off('channel:updated');
+      socket.off('channel:member_left');
+    };
+  }, [userId, activeChannel, setActiveChannel]);
 
   const handleDMClick = (dm: Channel) => {
     if (activeChannel?.id === dm.id) return;
@@ -88,29 +103,31 @@ export const DMList = () => {
     socket.emit('channel:join', dm.id);
   };
 
-  if (loading) return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 text-gray-400">Fetching messages...</div>
-    </div>
-  );
+  if (loading && page === 1) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="p-4 text-gray-400">Fetching messages...</div>
+      </div>
+    );
+  }
 
-  if (error) return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 text-red-500">{error}</div>
-    </div>
-  );
+  if (error) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="p-4 text-red-500">{error}</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
+    <div 
+      className="flex flex-col h-full overflow-y-auto"
+      onScroll={handleScroll}
+    >
       <div className="space-y-1">
         {channels.map(dm => {
           const otherMember = dm.members.find(member => member.id !== userId);
-          if (!otherMember) {
-            console.log('No other member found in channel:', dm.id);
-            return null;
-          }
-
-          const status = userStatuses[otherMember.id] || 'offline';
+          if (!otherMember) return null;
 
           return (
             <div
@@ -125,7 +142,7 @@ export const DMList = () => {
               <div className="flex items-center space-x-2">
                 <div 
                   className={`w-2 h-2 rounded-full ${
-                    status === 'online' ? 'bg-green-500' : 'bg-red-500'
+                    otherMember.user_status === 'online' ? 'bg-green-500' : 'bg-red-500'
                   }`}
                 />
                 <span className={`text-sm font-medium ${
@@ -137,6 +154,11 @@ export const DMList = () => {
             </div>
           );
         })}
+        {loading && page > 1 && (
+          <div className="p-4 text-center text-gray-400">
+            Loading more...
+          </div>
+        )}
       </div>
     </div>
   );

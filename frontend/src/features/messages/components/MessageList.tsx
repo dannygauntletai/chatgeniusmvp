@@ -13,6 +13,7 @@ import { UserService } from '../../../services/user.service';
 import { useUserContext } from '../../../contexts/UserContext';
 import { UserInviteModal } from '../../users/components/UserInviteModal';
 import { ChannelMembersModal } from '../../channels/components/ChannelMembersModal';
+import { MessageInput } from './MessageInput';
 
 const ChannelHeader = ({ name, isPrivate, channelId }: { name: string; isPrivate: boolean; channelId: string }) => {
   const [userStatus, setUserStatus] = useState<string | null>(null);
@@ -140,7 +141,16 @@ const MessageListContent = () => {
     if (messages.length > 0 && !loading) {
       scrollToBottom();
     }
-  }, [loading, activeChannel?.id]);
+  }, [loading, activeChannel?.id, messages.length]);
+
+  const handleOptimisticUpdate = (message: Message) => {
+    setMessages(prev => [...prev, message]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+  };
+
+  const handleOptimisticRevert = (messageId: string) => {
+    setMessages(prev => prev.filter(m => m.id !== messageId));
+  };
 
   useEffect(() => {
     if (!activeChannel) {
@@ -148,7 +158,6 @@ const MessageListContent = () => {
       return;
     }
 
-    // Join the channel's socket room
     socket.emit('channel:join', activeChannel.id);
 
     setLoading(true);
@@ -156,15 +165,28 @@ const MessageListContent = () => {
       .then(data => {
         setMessages(data.filter(message => !message.threadId));
         setError(null);
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
       })
       .catch(() => setError('Failed to load messages'))
       .finally(() => setLoading(false));
 
     const handleNewMessage = (message: Message) => {
       if (message.channelId === activeChannel.id && !message.threadId) {
-        setMessages(prev => [...prev, message]);
-        // Use smooth scrolling for new messages
-        scrollToBottom('smooth');
+        setMessages(prev => {
+          const tempMessageIndex = prev.findIndex(m => 
+            m.id.startsWith('temp-') && m.content === message.content
+          );
+          
+          if (tempMessageIndex === -1) {
+            return [...prev, message];
+          }
+          
+          const newMessages = [...prev];
+          newMessages[tempMessageIndex] = message;
+          return newMessages;
+        });
+        
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }
     };
 
@@ -188,7 +210,7 @@ const MessageListContent = () => {
         />
         <div 
           ref={messageListRef}
-          className="absolute inset-0 top-12 overflow-y-auto bg-gray-800"
+          className="absolute inset-0 top-12 bottom-[72px] overflow-y-auto bg-gray-800"
         >
           {loading ? (
             <div className="h-full flex items-center justify-center">
@@ -210,6 +232,12 @@ const MessageListContent = () => {
               <div ref={messagesEndRef} />
             </div>
           )}
+        </div>
+        <div className="absolute bottom-0 left-0 right-0">
+          <MessageInput 
+            onOptimisticUpdate={handleOptimisticUpdate}
+            onOptimisticRevert={handleOptimisticRevert}
+          />
         </div>
       </div>
       {isThreadOpen && activeThreadMessage && (

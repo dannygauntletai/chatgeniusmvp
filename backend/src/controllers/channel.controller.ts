@@ -251,117 +251,88 @@ export class ChannelController {
 
   static async getChannels(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      console.log('Getting channels for user:', req.auth?.userId);
-      
       const userId = req.auth?.userId;
+      const { page = 1, limit = 50 } = req.query;
+      const skip = (Number(page) - 1) * Number(limit);
+
       if (!userId) {
-        console.error('No userId found in auth');
         res.status(401).json({ message: 'User not authenticated' });
         return;
       }
 
-      // Ensure user exists in database
-      const user = await prisma.user.findUnique({
-        where: { id: userId }
-      });
-
-      if (!user) {
-        console.error('User not found in database:', userId);
-        res.status(404).json({ message: 'User not found' });
-        return;
-      }
-
-      // First, get all public channels
-      const publicChannels = await prisma.channel.findMany({
-        where: {
-          AND: [
-            { isPrivate: false },
-            { name: { not: { startsWith: 'dm-' } } }
-          ]
-        },
-        include: {
-          members: true,
-          owner: true,
-          _count: {
-            select: { members: true }
-          }
-        }
-      });
-
-      console.log('Found public channels:', publicChannels.length);
-
-      // Check if user has any channel memberships (indicating they've logged in before)
-      const existingMemberships = await prisma.channel.findMany({
-        where: {
-          members: {
-            some: { id: userId }
-          }
-        },
-        select: { id: true }
-      });
-
-      console.log('Found existing memberships:', existingMemberships.length);
-
-      // Only auto-join public channels if this is the user's first login (no existing memberships)
-      if (existingMemberships.length === 0) {
-        try {
-          await Promise.all(
-            publicChannels.map(async (channel: { id: string }) => {
-              const updatedChannel = await prisma.channel.update({
-                where: { id: channel.id },
-                data: {
-                  members: {
-                    connect: { id: userId }
-                  }
-                }
-              });
-              console.log(`User ${userId} joined channel ${channel.id}`);
-              io.emit('channel:member_joined', { channelId: channel.id, user: { id: userId } });
-              return updatedChannel;
-            })
-          );
-        } catch (error) {
-          console.error('Error auto-joining channels:', error);
-          // Continue execution even if auto-join fails
-        }
-      }
-
-      // Now get all channels the user has access to (including the ones they were just added to)
-      const channels = await prisma.channel.findMany({
-        where: {
-          AND: [
-            { members: { some: { id: userId } } },
-            { name: { not: { startsWith: 'dm-' } } }
-          ]
-        },
-        include: {
-          members: true,
-          owner: true,
-          _count: {
-            select: { members: true }
-          }
-        }
-      });
-
-      const dms = await prisma.channel.findMany({
-        where: {
-          AND: [
-            { name: { startsWith: 'dm-' } },
-            { members: { some: { id: userId } } }
-          ]
-        },
-        include: {
-          members: true,
-          owner: true,
-          _count: {
-            select: { members: true }
-          }
-        }
-      });
+      // Single query to get both channels and DMs with pagination
+      const [channels, dms] = await Promise.all([
+        prisma.channel.findMany({
+          where: {
+            AND: [
+              { members: { some: { id: userId } } },
+              { name: { not: { startsWith: 'dm-' } } }
+            ]
+          },
+          include: {
+            members: {
+              select: {
+                id: true,
+                username: true,
+                user_status: true
+              }
+            },
+            owner: {
+              select: {
+                id: true,
+                username: true
+              }
+            },
+            _count: {
+              select: { members: true }
+            }
+          },
+          orderBy: {
+            updatedAt: 'desc'
+          },
+          take: Number(limit),
+          skip
+        }),
+        prisma.channel.findMany({
+          where: {
+            AND: [
+              { name: { startsWith: 'dm-' } },
+              { members: { some: { id: userId } } }
+            ]
+          },
+          include: {
+            members: {
+              select: {
+                id: true,
+                username: true,
+                user_status: true
+              }
+            },
+            owner: {
+              select: {
+                id: true,
+                username: true
+              }
+            },
+            _count: {
+              select: { members: true }
+            }
+          },
+          orderBy: {
+            updatedAt: 'desc'
+          },
+          take: Number(limit),
+          skip
+        })
+      ]);
 
       res.json({
         channels,
-        directMessages: dms
+        directMessages: dms,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit)
+        }
       });
     } catch (error) {
       console.error('Error in getChannels:', error);

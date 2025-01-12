@@ -99,7 +99,6 @@ const DashboardLayout = () => {
           <MainLayout>
             <div className="flex-1 flex flex-col">
               <MessageList />
-              <MessageInput />
             </div>
           </MainLayout>
         </ChannelProvider>

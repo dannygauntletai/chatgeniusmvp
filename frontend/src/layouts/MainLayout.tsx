@@ -41,7 +41,7 @@ export const MainLayout = ({ children }: { children: React.ReactNode }) => {
       <GlobalSearch onOpenFileBrowser={handleOpenFileBrowser} />
       <div className="flex h-screen bg-gray-900 text-white pt-[52px]">
         {/* Sidebar */}
-        <div className="w-64 bg-gray-1100 flex flex-col border-r border-gray-600">
+        <div className="w-72 bg-gray-1100 flex flex-col border-r border-gray-600">
           {/* Header */}
           <div className="p-4 border-b border-gray-600">
             <h1 className="text-xl font-bold">ChatGenius v2</h1>

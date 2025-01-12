@@ -44,7 +44,27 @@ export class ThreadService {
 
   static async getThreadMessages(parentMessageId: string) {
     try {
-      const messages = await prisma.message.findMany({
+      // First get the parent message
+      const parentMessage = await prisma.message.findUnique({
+        where: {
+          id: parentMessageId
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+            },
+          },
+        }
+      });
+
+      if (!parentMessage) {
+        throw new CustomError('Thread not found', 404);
+      }
+
+      // Then get all replies
+      const replies = await prisma.message.findMany({
         where: {
           threadId: parentMessageId,
         },
@@ -61,7 +81,8 @@ export class ThreadService {
         },
       });
       
-      return messages;
+      // Return both parent and replies
+      return [parentMessage, ...replies];
     } catch (error) {
       if (error instanceof CustomError) throw error;
       throw new CustomError('Failed to fetch thread messages', 500);
