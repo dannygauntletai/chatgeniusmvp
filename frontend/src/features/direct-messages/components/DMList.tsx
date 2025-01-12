@@ -24,14 +24,11 @@ export const DMList = () => {
     const loadChannels = async () => {
       try {
         const response = await ChannelService.getChannels();
-        const dmChannels = (Array.isArray(response) ? response : []).filter(
-          (channel: Channel) => channel.name.startsWith('dm-')
-        );
-        setChannels(dmChannels);
+        setChannels(response.directMessages);
 
         // Initialize user statuses
         const initialStatuses: Record<string, string> = {};
-        dmChannels.forEach((channel: Channel) => {
+        response.directMessages.forEach((channel: Channel) => {
           const otherMember = channel.members.find((member: ChannelMember) => member.id !== userId) as ChannelMember;
           if (otherMember) {
             initialStatuses[otherMember.id] = otherMember.status || 'offline';

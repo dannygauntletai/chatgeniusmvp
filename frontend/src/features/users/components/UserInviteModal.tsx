@@ -4,6 +4,7 @@ import { UserService } from '../../../services/user.service';
 import { ChannelService } from '../../../services/channel.service';
 import { User } from '../types/user.types';
 import { LoadingSpinner } from '../../../components/LoadingSpinner';
+import { useUserContext } from '../../../contexts/UserContext';
 
 interface UserInviteModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface UserInviteModalProps {
 
 export function UserInviteModal({ isOpen, onClose, channelId }: UserInviteModalProps) {
   const { userId } = useAuth();
+  const { username: currentUsername } = useUserContext();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,16 +58,21 @@ export function UserInviteModal({ isOpen, onClose, channelId }: UserInviteModalP
   };
 
   const handleUserClick = async (selectedUser: User) => {
+    if (!userId) {
+      setError('User not authenticated');
+      return;
+    }
+
     try {
       if (channelId) {
         // Invite user to existing channel
         await ChannelService.inviteToChannel(channelId, selectedUser.id);
       } else {
-        // Create DM channel
+        // Create DM channel with both usernames
         await ChannelService.createChannel({
-          name: `${selectedUser.username}`,
+          name: `dm-${currentUsername}-${selectedUser.username}`,
           isPrivate: true,
-          members: [selectedUser.id]
+          members: [userId, selectedUser.id]
         });
       }
       onClose();
