@@ -1,30 +1,12 @@
-import { Request } from 'express';
+import { Request } from 'express-serve-static-core';
+import { User } from '@clerk/clerk-sdk-node';
 
 export interface AuthenticatedRequest extends Request {
   auth: {
     userId: string;
-    user: {
-      id: string;
-      username: string;
-      email?: string;
-    };
+    user: User;
   };
-  body: {
-    name?: string;
-    isPrivate?: boolean;
-    members?: string[];
-    content?: string;
-    emoji?: string;
-    messageId?: string;
-    channelId?: string;
-    threadId?: string;
-    [key: string]: any;
-  };
-  params: {
-    channelId?: string;
-    messageId?: string;
-    threadId?: string;
-    userId?: string;
-    [key: string]: any;
-  };
+  body: any;
+  params: any;
+  query: any;
 } 
