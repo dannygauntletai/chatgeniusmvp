@@ -14,10 +14,22 @@ import userRoutes from './routes/user.routes';
 
 const app = express();
 const httpServer = createServer(app);
+
+// Configure allowed origins
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://chatgenius.fyi',
+  process.env.FRONTEND_URL
+].filter((origin): origin is string => Boolean(origin));
+
+console.log('Allowed origins:', allowedOrigins);
+
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST']
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
   }
 });
 
@@ -29,11 +41,21 @@ initializeSocket(io);
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json());
 
 // Health check route (unprotected)
