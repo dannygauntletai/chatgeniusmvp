@@ -10,11 +10,12 @@
 - Clerk
 - Prisma
 
-Reimplemented the MVP yesterday (1/11)
+# Demo link
 
-If this text is here, it means I haven't submitted v2 on app.gauntletai.com yet.
+https://chatgenius.fyi
 
-Taking a quick power nap, then I'll be back. Currently 3:30am.
+# Video
 
-Here's a video of the app:
 https://imgur.com/a/IcLEKy9
+
+Reimplemented the MVP yesterday (1/11)
