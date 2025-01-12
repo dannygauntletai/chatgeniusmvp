@@ -1,8 +1,15 @@
+# Dependencies
 node_modules
-.env
-.DS_Store
 /backend/node_modules
 /frontend/node_modules
+
+# Environment Variables
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+.env.test.local
 /backend/.env
 /backend/.env.local
 /backend/.env.development
@@ -15,4 +22,42 @@ node_modules
 /frontend/.env.production
 /frontend/.env.test
 /frontend/.env.test.local
-.gitignore
+
+# Build outputs
+/frontend/dist
+/frontend/build
+/backend/dist
+/backend/build
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+*.pem
+
+# Testing
+/coverage
+/frontend/coverage
+/backend/coverage
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Misc
+.DS_Store
+Thumbs.db

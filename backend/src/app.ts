@@ -28,7 +28,12 @@ io.use(socketAuth);
 initializeSocket(io);
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Health check route (unprotected)
@@ -46,10 +51,10 @@ app.use('/api/users', requireAuth, userRoutes);
 // Error handling
 app.use(errorHandler);
 
+// Server configuration
 const PORT = process.env.PORT || 5000;
-
-httpServer.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const server = app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
 
 export { app, io }; 
