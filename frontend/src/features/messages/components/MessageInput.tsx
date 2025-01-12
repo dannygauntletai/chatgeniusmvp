@@ -47,7 +47,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   if (!activeChannel && !onSend && !threadParentId) return null;
 
   return (
-    <div className="border-t">
+    <div className="border-t border-gray-600">
       <form onSubmit={handleSubmit} className="p-4">
         <div className="flex space-x-2">
           <input

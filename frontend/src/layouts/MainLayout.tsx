@@ -31,9 +31,9 @@ export const MainLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="flex h-screen bg-gray-900 text-white">
       {/* Sidebar */}
-      <div className="w-64 bg-gray-800 flex flex-col">
+      <div className="w-64 bg-gray-1100 flex flex-col border-r border-gray-600">
         {/* Header */}
-        <div className="p-4 border-b border-gray-800">
+        <div className="p-4 border-b border-gray-600">
           <h1 className="text-xl font-bold">ChatGenius v2</h1>
         </div>
 
@@ -72,7 +72,7 @@ export const MainLayout = ({ children }: { children: React.ReactNode }) => {
         </div>
 
         {/* Footer with Upload and Sign Out */}
-        <div className="p-4 border-t border-gray-800 space-y-2">
+        <div className="p-4 border-t border-gray-600 space-y-2">
           <div className="flex gap-2">
             <button
               onClick={() => setIsFileUploadModalOpen(true)}
