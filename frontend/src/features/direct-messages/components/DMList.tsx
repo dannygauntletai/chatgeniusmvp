@@ -8,7 +8,6 @@ import { Channel } from '../../../types/channel.types';
 interface ChannelMember {
   id: string;
   username: string;
-  status?: string;
 }
 
 export const DMList = () => {
@@ -29,9 +28,9 @@ export const DMList = () => {
         // Initialize user statuses
         const initialStatuses: Record<string, string> = {};
         response.directMessages.forEach((channel: Channel) => {
-          const otherMember = channel.members.find((member: ChannelMember) => member.id !== userId) as ChannelMember;
+          const otherMember = channel.members.find((member: ChannelMember) => member.id !== userId);
           if (otherMember) {
-            initialStatuses[otherMember.id] = otherMember.status || 'offline';
+            initialStatuses[otherMember.id] = 'offline';
           }
         });
         setUserStatuses(initialStatuses);
@@ -44,6 +43,35 @@ export const DMList = () => {
 
     if (userId) {
       loadChannels();
+
+      // Listen for new DM channels
+      socket.on('channel:created', (channel: Channel) => {
+        if (channel.name.startsWith('dm-') && channel.members.some(m => m.id === userId)) {
+          setChannels(prev => [...prev, channel]);
+          
+          // Initialize status for the new DM user
+          const otherMember = channel.members.find(m => m.id !== userId);
+          if (otherMember) {
+            setUserStatuses(prev => ({
+              ...prev,
+              [otherMember.id]: 'offline'
+            }));
+          }
+        }
+      });
+
+      // Listen for user status updates
+      socket.on('user:status_updated', ({ userId: updatedUserId, status }: { userId: string; status: string }) => {
+        setUserStatuses(prev => ({
+          ...prev,
+          [updatedUserId]: status
+        }));
+      });
+
+      return () => {
+        socket.off('channel:created');
+        socket.off('user:status_updated');
+      };
     }
   }, [userId]);
 

@@ -31,6 +31,7 @@ export function UserInviteModal({ isOpen, onClose, channelId }: UserInviteModalP
       setLoading(true);
       setError(null);
       const allUsers = await UserService.getUsers();
+      const { directMessages } = await ChannelService.getChannels();
       
       // Get the current channel to check its members
       if (channelId) {
@@ -45,8 +46,14 @@ export function UserInviteModal({ isOpen, onClose, channelId }: UserInviteModalP
           setUsers(filteredUsers);
         }
       } else {
-        // For DMs, just filter out the current user
-        const filteredUsers = allUsers.filter(u => u.id !== userId);
+        // For DMs, filter out users who already have a DM with the current user
+        const existingDMUserIds = directMessages.flatMap(dm => 
+          dm.members.map(m => m.id)
+        ).filter(id => id !== userId);
+
+        const filteredUsers = allUsers.filter(u => 
+          u.id !== userId && !existingDMUserIds.includes(u.id)
+        );
         setUsers(filteredUsers);
       }
     } catch (error) {
