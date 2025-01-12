@@ -1,20 +1,23 @@
 import { Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { AuthenticatedRequest } from '../types/request.types';
+import { prisma } from '../utils/prisma';
 import { io } from '../app';
-import { AuthenticatedRequest } from '../middleware/auth.middleware';
-
-const prisma = new PrismaClient();
 
 export class ChannelController {
   static async createChannel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const { name, isPrivate, members } = req.body;
+      const { name, isPrivate = false, members = [] } = req.body;
       const userId = req.auth.userId;
+
+      if (!name) {
+        res.status(400).json({ message: 'Channel name is required' });
+        return;
+      }
 
       // For DM channels, ensure both users are included as members
       if (name.startsWith('dm-')) {
         // Validate members array
-        if (!members || !Array.isArray(members) || members.length !== 2) {
+        if (!Array.isArray(members) || members.length !== 2) {
           res.status(400).json({ message: 'DM channels require exactly two members' });
           return;
         }
