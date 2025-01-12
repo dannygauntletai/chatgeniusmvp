@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 import { Channel } from '../../../types/channel.types';
 import { ChannelService } from '../../../services/channel.service';
 import { socket } from '../../../services/socket.service';
 import { CreateChannelModal } from './CreateChannelModal';
 import { useChannel } from '../context/ChannelContext';
 import { useUserContext } from '../../../contexts/UserContext';
+import { LeaveChannelModal } from './LeaveChannelModal';
 
 interface ChannelListProps {
   onCreateChannel: () => void;
@@ -14,8 +16,10 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [channelToLeave, setChannelToLeave] = useState<Channel | null>(null);
+  const { userId } = useAuth();
   const { activeChannel, setActiveChannel } = useChannel();
-  const { userId } = useUserContext();
 
   useEffect(() => {
     const loadChannels = async () => {
@@ -83,6 +87,21 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
     }
   };
 
+  const handleLeaveClick = (channel: Channel, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setChannelToLeave(channel);
+    setLeaveModalOpen(true);
+  };
+
+  const handleLeaveComplete = () => {
+    if (channelToLeave) {
+      setChannels(channels.filter(c => c.id !== channelToLeave.id));
+      if (activeChannel?.id === channelToLeave.id) {
+        setActiveChannel(null);
+      }
+    }
+  };
+
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       {error && <div className="p-4 text-red-500">{error}</div>}
@@ -111,12 +130,9 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
               {channel._count?.members || 0} members
             </span>
             {channel.members?.some(m => m.id === userId) && 
-             channel.ownerId !== userId && (
+             (!channel.isPrivate || channel.ownerId !== userId) && (
               <button
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  await ChannelService.leaveChannel(channel.id);
-                }}
+                onClick={(e) => handleLeaveClick(channel, e)}
                 className="text-xs text-red-400 hover:text-red-300"
               >
                 Leave
@@ -127,6 +143,18 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
       ))}
       {loading && channels.length === 0 && (
         <div className="p-4 text-gray-400">Fetching channels...</div>
+      )}
+      {channelToLeave && (
+        <LeaveChannelModal
+          isOpen={leaveModalOpen}
+          onClose={() => {
+            setLeaveModalOpen(false);
+            setChannelToLeave(null);
+          }}
+          channelId={channelToLeave.id}
+          channelName={channelToLeave.name}
+          onLeave={handleLeaveComplete}
+        />
       )}
     </div>
   );

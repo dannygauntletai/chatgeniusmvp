@@ -22,6 +22,10 @@ export class ChannelService {
     socket.emit('channel:join', channelId);
   }
 
+  static async inviteToChannel(channelId: string, userId: string): Promise<void> {
+    await api.post(`/api/channels/${channelId}/invite`, { userId });
+  }
+
   static async leaveChannel(channelId: string): Promise<void> {
     try {
       await api.post(`/api/channels/${channelId}/leave`, {});

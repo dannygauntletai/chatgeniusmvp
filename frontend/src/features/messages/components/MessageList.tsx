@@ -11,9 +11,11 @@ import { ThreadView } from '../../threads/components/ThreadView';
 import { useThread } from '../../threads/context';
 import { UserService } from '../../../services/user.service';
 import { useUserContext } from '../../../contexts/UserContext';
+import { UserInviteModal } from '../../users/components/UserInviteModal';
 
-const ChannelHeader = ({ name }: { name: string }) => {
+const ChannelHeader = ({ name, isPrivate, channelId }: { name: string; isPrivate: boolean; channelId: string }) => {
   const [userStatus, setUserStatus] = useState<string | null>(null);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const { username: currentUsername } = useUserContext();
   const [otherUsername, setOtherUsername] = useState<string>('');
   const [otherUserId, setOtherUserId] = useState<string>('');
@@ -62,19 +64,37 @@ const ChannelHeader = ({ name }: { name: string }) => {
     : name.startsWith('#') ? name : `#${name}`;
 
   return (
-    <div className="h-12 flex items-center px-6 border-b border-gray-600 bg-gray-800">
-      <div className="flex items-center gap-2">
-        <h2 className="text-lg font-medium text-white">
-          {displayName}
-        </h2>
-        {name.startsWith('dm-') && userStatus && (
-          <>
-            <span className="text-gray-300">-</span>
-            <span>{userStatus}</span>
-          </>
+    <>
+      <div className="h-12 flex items-center justify-between px-6 border-b border-gray-600 bg-gray-800">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-medium text-white">
+            {displayName}
+          </h2>
+          {name.startsWith('dm-') && userStatus && (
+            <>
+              <span className="text-gray-300">-</span>
+              <span>{userStatus}</span>
+            </>
+          )}
+        </div>
+        {isPrivate && !name.startsWith('dm-') && (
+          <button
+            onClick={() => setIsInviteModalOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Invite
+          </button>
         )}
       </div>
-    </div>
+      <UserInviteModal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        channelId={channelId}
+      />
+    </>
   );
 };
 
@@ -132,7 +152,11 @@ const MessageListContent = () => {
   return (
     <div className="h-full flex">
       <div className="flex-1 relative">
-        <ChannelHeader name={activeChannel.name} />
+        <ChannelHeader 
+          name={activeChannel.name} 
+          isPrivate={activeChannel.isPrivate}
+          channelId={activeChannel.id}
+        />
         <div 
           ref={messageListRef}
           className="absolute inset-0 top-12 overflow-y-auto bg-gray-800"

@@ -217,21 +217,56 @@ export class ChannelController {
     try {
       const userId = req.auth.userId;
 
+      // First, get all public channels
+      const publicChannels = await prisma.channel.findMany({
+        where: {
+          AND: [
+            { isPrivate: false },
+            { name: { not: { startsWith: 'dm-' } } }
+          ]
+        },
+        include: {
+          members: true,
+          owner: true,
+          _count: {
+            select: { members: true }
+          }
+        }
+      });
+
+      // Check if user has any channel memberships (indicating they've logged in before)
+      const existingMemberships = await prisma.channel.findMany({
+        where: {
+          members: {
+            some: { id: userId }
+          }
+        },
+        select: { id: true }
+      });
+
+      // Only auto-join public channels if this is the user's first login (no existing memberships)
+      if (existingMemberships.length === 0) {
+        await Promise.all(
+          publicChannels.map(async (channel: { id: string }) => {
+            await prisma.channel.update({
+              where: { id: channel.id },
+              data: {
+                members: {
+                  connect: { id: userId }
+                }
+              }
+            });
+            io.emit('channel:member_joined', { channelId: channel.id, user: { id: userId } });
+          })
+        );
+      }
+
+      // Now get all channels the user has access to (including the ones they were just added to)
       const channels = await prisma.channel.findMany({
         where: {
-          OR: [
-            { 
-              AND: [
-                { isPrivate: false },
-                { name: { not: { startsWith: 'dm-' } } }
-              ]
-            },
-            {
-              AND: [
-                { members: { some: { id: userId } } },
-                { name: { not: { startsWith: 'dm-' } } }
-              ]
-            }
+          AND: [
+            { members: { some: { id: userId } } },
+            { name: { not: { startsWith: 'dm-' } } }
           ]
         },
         include: {
@@ -265,6 +300,55 @@ export class ChannelController {
       });
     } catch (error) {
       next(error);
+    }
+  }
+
+  static async inviteToChannel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const { channelId } = req.params;
+      const { userId } = req.body;
+
+      const channel = await prisma.channel.findUnique({
+        where: { id: channelId },
+        include: {
+          members: true,
+          owner: true
+        }
+      });
+
+      if (!channel) {
+        return res.status(404).json({ message: 'Channel not found' });
+      }
+
+      if (!channel.isPrivate) {
+        return res.status(400).json({ message: 'Cannot invite to public channel' });
+      }
+
+      const existingMember = channel.members.some((member: { id: string }) => member.id === userId);
+      if (existingMember) {
+        return res.status(400).json({ message: 'User is already a member of this channel' });
+      }
+
+      const updatedChannel = await prisma.channel.update({
+        where: { id: channelId },
+        data: {
+          members: {
+            connect: { id: userId }
+          }
+        },
+        include: {
+          members: true,
+          owner: true,
+          _count: {
+            select: { members: true }
+          }
+        }
+      });
+
+      io.emit('channel:member_joined', { channelId, user: { id: userId } });
+      return res.json(updatedChannel);
+    } catch (error) {
+      return next(error);
     }
   }
 } 

@@ -30,53 +30,48 @@ export const CreateChannelModal = ({ isOpen, onClose }: CreateChannelModalProps)
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Create Channel">
-      <div className="p-4">
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-1 text-gray-700">
-              Channel Name
-            </label>
+      <form onSubmit={handleSubmit}>
+        <div className="mb-4">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full px-4 py-2 bg-gray-900 text-white rounded border border-gray-700 focus:outline-none focus:border-blue-500"
+            placeholder="Enter channel name..."
+            required
+          />
+        </div>
+        <div className="mb-6">
+          <label className="flex items-center gap-2 text-gray-300">
             <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full p-2 border rounded focus:outline-none focus:border-primary text-black"
-              placeholder="e.g. general"
-              required
+              type="checkbox"
+              checked={isPrivate}
+              onChange={(e) => setIsPrivate(e.target.checked)}
+              className="rounded border-gray-700 bg-gray-900 text-blue-500 focus:ring-blue-500"
             />
-          </div>
-          <div className="mb-4">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={isPrivate}
-                onChange={(e) => setIsPrivate(e.target.checked)}
-                className="mr-2"
-              />
-              <span className="text-sm text-gray-700">Private Channel</span>
-            </label>
-          </div>
-          {error && (
-            <div className="text-red-500 text-sm mb-4">{error}</div>
-          )}
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-50"
-            >
-              {loading ? 'Creating...' : 'Create Channel'}
-            </button>
-          </div>
-        </form>
-      </div>
+            <span>Private Channel</span>
+          </label>
+        </div>
+        {error && (
+          <div className="text-red-500 text-sm mb-4">{error}</div>
+        )}
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-gray-400 hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+          >
+            {loading ? 'Creating...' : 'Create Channel'}
+          </button>
+        </div>
+      </form>
     </Modal>
   );
 }; 
