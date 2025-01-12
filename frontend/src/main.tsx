@@ -16,7 +16,10 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}>
+    <ClerkProvider 
+      publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}
+      proxyUrl={import.meta.env.VITE_CLERK_PROXY_URL || "https://accounts.clerk.services"}
+    >
       <QueryClientProvider client={queryClient}>
         <App />
       </QueryClientProvider>

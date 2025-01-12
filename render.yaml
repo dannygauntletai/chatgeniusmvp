@@ -33,4 +33,6 @@ services:
       - key: VITE_WS_URL
         value: wss://chatgenius-backend.onrender.com
       - key: VITE_CLERK_PUBLISHABLE_KEY
-        sync: false 
+        sync: false
+      - key: VITE_CLERK_PROXY_URL
+        value: https://accounts.clerk.services 
