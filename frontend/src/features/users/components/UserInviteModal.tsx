@@ -3,8 +3,9 @@ import { useAuth } from '@clerk/clerk-react';
 import { UserService } from '../../../services/user.service';
 import { ChannelService } from '../../../services/channel.service';
 import { User } from '../types/user.types';
-import { LoadingSpinner } from '../../../components/LoadingSpinner';
+import { LoadingSpinner } from '../../shared/components/LoadingSpinner';
 import { useUserContext } from '../../../contexts/UserContext';
+import { Modal } from '../../shared/components/Modal';
 
 interface UserInviteModalProps {
   isOpen: boolean;
@@ -33,12 +34,10 @@ export function UserInviteModal({ isOpen, onClose, channelId }: UserInviteModalP
       const allUsers = await UserService.getUsers();
       const { directMessages } = await ChannelService.getChannels();
       
-      // Get the current channel to check its members
       if (channelId) {
         const channels = await ChannelService.getChannels();
         const currentChannel = channels.channels.find(c => c.id === channelId);
         if (currentChannel) {
-          // Filter out current user and users who are already in the channel
           const filteredUsers = allUsers.filter(u => 
             u.id !== userId && 
             !currentChannel.members.some(m => m.id === u.id)
@@ -46,7 +45,6 @@ export function UserInviteModal({ isOpen, onClose, channelId }: UserInviteModalP
           setUsers(filteredUsers);
         }
       } else {
-        // For DMs, filter out users who already have a DM with the current user
         const existingDMUserIds = directMessages.flatMap(dm => 
           dm.members.map(m => m.id)
         ).filter(id => id !== userId);
@@ -72,10 +70,8 @@ export function UserInviteModal({ isOpen, onClose, channelId }: UserInviteModalP
 
     try {
       if (channelId) {
-        // Invite user to existing channel
         await ChannelService.inviteToChannel(channelId, selectedUser.id);
       } else {
-        // Create DM channel with both usernames
         await ChannelService.createChannel({
           name: `dm-${currentUsername}-${selectedUser.username}`,
           isPrivate: true,
@@ -93,26 +89,13 @@ export function UserInviteModal({ isOpen, onClose, channelId }: UserInviteModalP
     user.username?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black bg-opacity-50"></div>
-      <div className="relative bg-gray-1100 rounded-xl shadow-2xl p-6 w-full max-w-md">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-white">
-            {channelId ? 'Invite to Channel' : 'New Direct Message'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white"
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
+    <Modal 
+      isOpen={isOpen} 
+      onClose={onClose} 
+      title={channelId ? 'Invite to Channel' : 'New Direct Message'}
+    >
+      <div className="p-4">
         <input
           type="text"
           placeholder="Search users..."
@@ -149,6 +132,6 @@ export function UserInviteModal({ isOpen, onClose, channelId }: UserInviteModalP
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 } 

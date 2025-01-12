@@ -1,56 +1,80 @@
 import { SignIn, SignUp, useClerk, useAuth } from '@clerk/clerk-react';
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-
-console.log('HomePage module loaded');
+import { LoadingSpinner } from '../../shared/components/LoadingSpinner';
 
 export const HomePage = () => {
   const clerk = useClerk();
   const { isSignedIn, isLoaded } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  
-  console.log('HomePage component rendering');
-  console.log('Clerk instance in HomePage:', clerk);
-  console.log('Clerk loaded in HomePage:', clerk.loaded);
-  console.log('Auth state in HomePage:', { isSignedIn, isLoaded });
-  console.log('Current path:', location.pathname);
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
-      console.log('User is signed in, redirecting to dashboard');
       navigate('/dashboard', { replace: true });
       return;
     }
   }, [isLoaded, isSignedIn, navigate]);
 
   if (!clerk.loaded) {
-    console.log('Clerk not loaded yet in HomePage, showing loading state');
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-600">Loading authentication...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner className="h-8 w-8" />
+          <div className="text-gray-400">Loading authentication...</div>
+        </div>
       </div>
     );
   }
 
   if (isLoaded && isSignedIn) {
-    return null; // Will be redirected by useEffect
+    return null;
   }
 
   const isSignUp = location.pathname === '/sign-up';
-  console.log('Rendering auth component for path:', isSignUp ? 'sign-up' : 'sign-in');
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md p-6">
-        <h1 className="text-2xl font-bold text-center mb-6">Welcome to ChatGenius</h1>
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          {isSignUp ? (
-            <SignUp signInUrl="/sign-in" afterSignUpUrl="/dashboard" />
-          ) : (
-            <SignIn signUpUrl="/sign-up" afterSignInUrl="/dashboard" />
-          )}
-        </div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 px-4 py-12">
+      <div className="w-[400px]">
+        {isSignUp ? (
+          <SignUp 
+            signInUrl="/sign-in" 
+            afterSignUpUrl="/dashboard"
+            appearance={{
+              elements: {
+                formButtonPrimary: 'bg-blue-600 hover:bg-blue-700',
+                card: 'bg-gray-800 border border-gray-700 shadow-xl rounded-xl',
+                headerTitle: 'text-white',
+                headerSubtitle: 'text-gray-400',
+                socialButtonsBlockButton: 'border-gray-700 bg-gray-900 hover:bg-gray-800 text-white',
+                dividerLine: 'bg-gray-700',
+                dividerText: 'text-gray-500',
+                formFieldLabel: 'text-gray-400',
+                formFieldInput: 'bg-gray-900 border-gray-700 text-white',
+                footerActionLink: 'text-blue-400 hover:text-blue-300',
+              }
+            }}
+          />
+        ) : (
+          <SignIn 
+            signUpUrl="/sign-up" 
+            afterSignInUrl="/dashboard"
+            appearance={{
+              elements: {
+                formButtonPrimary: 'bg-blue-600 hover:bg-blue-700',
+                card: 'bg-gray-800 border border-gray-700 shadow-xl rounded-xl',
+                headerTitle: 'text-white',
+                headerSubtitle: 'text-gray-400',
+                socialButtonsBlockButton: 'border-gray-700 bg-gray-900 hover:bg-gray-800 text-white',
+                dividerLine: 'bg-gray-700',
+                dividerText: 'text-gray-500',
+                formFieldLabel: 'text-gray-400',
+                formFieldInput: 'bg-gray-900 border-gray-700 text-white',
+                footerActionLink: 'text-blue-400 hover:text-blue-300',
+              }
+            }}
+          />
+        )}
       </div>
     </div>
   );
