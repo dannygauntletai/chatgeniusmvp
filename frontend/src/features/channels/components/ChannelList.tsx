@@ -7,6 +7,7 @@ import { CreateChannelModal } from './CreateChannelModal';
 import { useChannel } from '../context/ChannelContext';
 import { useUserContext } from '../../../contexts/UserContext';
 import { LeaveChannelModal } from './LeaveChannelModal';
+import { DeleteChannelModal } from './DeleteChannelModal';
 
 interface ChannelListProps {
   onCreateChannel: () => void;
@@ -17,7 +18,9 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [channelToLeave, setChannelToLeave] = useState<Channel | null>(null);
+  const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
   const { userId } = useAuth();
   const { activeChannel, setActiveChannel } = useChannel();
 
@@ -42,28 +45,75 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
       }
     });
 
-    socket.on('channel:member_joined', ({ channelId, user }: { channelId: string; user: { id: string; username: string } }) => {
-      setChannels(prev => prev.map(ch => 
-        ch.id === channelId 
-          ? { ...ch, _count: { members: (ch._count?.members || 0) + 1 }} 
-          : ch
-      ));
+    // Listen for channel membership events
+    socket.on('channel:member_left', ({ channelId, userId: leftUserId, memberCount }: { 
+      channelId: string; 
+      userId: string; 
+      memberCount: number;
+    }) => {
+      setChannels(prevChannels => {
+        // If the user who left is the current user, remove the channel
+        if (leftUserId === userId) {
+          const newChannels = prevChannels.filter(c => c.id !== channelId);
+          if (activeChannel?.id === channelId) {
+            setActiveChannel(null);
+          }
+          return newChannels;
+        }
+        
+        // Otherwise, just update the member count
+        return prevChannels.map(channel => {
+          if (channel.id === channelId) {
+            return {
+              ...channel,
+              _count: { ...channel._count, members: memberCount }
+            };
+          }
+          return channel;
+        });
+      });
     });
 
-    socket.on('channel:member_left', ({ channelId }: { channelId: string }) => {
-      setChannels(prev => prev.map(ch => 
-        ch.id === channelId 
-          ? { ...ch, _count: { members: (ch._count?.members || 0) - 1 }} 
-          : ch
-      ));
+    socket.on('channel:member_joined', ({ channelId, user, memberCount }: {
+      channelId: string;
+      user: { id: string; username: string };
+      memberCount: number;
+    }) => {
+      setChannels(prevChannels => 
+        prevChannels.map(channel => {
+          if (channel.id === channelId) {
+            return {
+              ...channel,
+              members: [...(channel.members || []), user],
+              _count: { ...channel._count, members: memberCount }
+            };
+          }
+          return channel;
+        })
+      );
+    });
+
+    // Add listener for channel deletion
+    socket.on('channel:deleted', ({ channelId, memberIds }: { 
+      channelId: string; 
+      memberIds: string[];
+    }) => {
+      // Only update if the current user was a member and userId is defined
+      if (userId && memberIds.includes(userId)) {
+        setChannels(prevChannels => prevChannels.filter(c => c.id !== channelId));
+        if (activeChannel?.id === channelId) {
+          setActiveChannel(null);
+        }
+      }
     });
 
     return () => {
       socket.off('channel:created');
-      socket.off('channel:member_joined');
       socket.off('channel:member_left');
+      socket.off('channel:member_joined');
+      socket.off('channel:deleted');
     };
-  }, []);
+  }, [userId, activeChannel, setActiveChannel]);
 
   const handleChannelClick = (channel: Channel) => {
     try {
@@ -102,6 +152,21 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
     }
   };
 
+  const handleDeleteClick = (channel: Channel, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setChannelToDelete(channel);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteComplete = () => {
+    if (channelToDelete) {
+      setChannels(channels.filter(c => c.id !== channelToDelete.id));
+      if (activeChannel?.id === channelToDelete.id) {
+        setActiveChannel(null);
+      }
+    }
+  };
+
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       {error && <div className="p-4 text-red-500">{error}</div>}
@@ -129,15 +194,25 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
             <span className="text-xs text-gray-400">
               {channel._count?.members || 0} members
             </span>
-            {channel.members?.some(m => m.id === userId) && 
-             (!channel.isPrivate || channel.ownerId !== userId) && (
-              <button
-                onClick={(e) => handleLeaveClick(channel, e)}
-                className="text-xs text-red-400 hover:text-red-300"
-              >
-                Leave
-              </button>
-            )}
+            <div className="flex gap-2">
+              {channel.members?.some(m => m.id === userId) && 
+               channel.ownerId !== userId && (
+                <button
+                  onClick={(e) => handleLeaveClick(channel, e)}
+                  className="text-xs text-red-400 hover:text-red-300"
+                >
+                  Leave
+                </button>
+              )}
+              {channel.ownerId === userId && (
+                <button
+                  onClick={(e) => handleDeleteClick(channel, e)}
+                  className="text-xs text-red-400 hover:text-red-300"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ))}
@@ -154,6 +229,18 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
           channelId={channelToLeave.id}
           channelName={channelToLeave.name}
           onLeave={handleLeaveComplete}
+        />
+      )}
+      {channelToDelete && (
+        <DeleteChannelModal
+          isOpen={deleteModalOpen}
+          onClose={() => {
+            setDeleteModalOpen(false);
+            setChannelToDelete(null);
+          }}
+          channelId={channelToDelete.id}
+          channelName={channelToDelete.name}
+          onDelete={handleDeleteComplete}
         />
       )}
     </div>

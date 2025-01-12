@@ -4,10 +4,19 @@ import { ThreadState, ThreadMessageInput } from '../features/threads/types/threa
 import { Message } from '../features/messages/types/message.types';
 import { socket } from '../services/socket.service';
 
-export const useThread = (messageId?: string, shouldLoad: boolean = false) => {
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
+export const useThread = (messageId?: string, shouldLoad: boolean = false, initialParentMessage?: Message) => {
   const [state, setState] = useState<ThreadState>({
     isLoading: false,
     error: undefined,
+    activeThread: initialParentMessage ? {
+      parentMessage: initialParentMessage,
+      replies: [],
+      replyCount: 0,
+      lastReply: undefined
+    } : undefined
   });
 
   const [hasUnreadReplies, setHasUnreadReplies] = useState(false);
@@ -15,28 +24,38 @@ export const useThread = (messageId?: string, shouldLoad: boolean = false) => {
   const loadThreadMessages = useCallback(async () => {
     if (!messageId) return;
 
-    setState(prev => ({ ...prev, isLoading: true }));
+    setState(prev => ({
+      ...prev,
+      isLoading: true,
+      error: undefined
+    }));
+
     try {
       const messages = await ThreadService.getThreadMessages(messageId);
       setState(prev => ({
         ...prev,
+        isLoading: false,
         activeThread: {
-          parentMessage: messages.find(m => m.id === messageId) || messages[0],
-          replies: messages.filter(m => m.threadId === messageId),
-          replyCount: messages.filter(m => m.threadId === messageId).length,
-          lastReply: messages[messages.length - 1]
-        },
-        isLoading: false
+          parentMessage: messages[0],
+          replies: messages.slice(1),
+          replyCount: messages.length - 1,
+          lastReply: messages.length > 1 ? messages[messages.length - 1] : undefined
+        }
       }));
-      setHasUnreadReplies(false);
     } catch (error) {
       setState(prev => ({
         ...prev,
-        error: 'Failed to load thread messages',
-        isLoading: false
+        isLoading: false,
+        error: 'Unable to load thread',
+        activeThread: initialParentMessage ? {
+          parentMessage: initialParentMessage,
+          replies: [],
+          replyCount: 0,
+          lastReply: undefined
+        } : undefined
       }));
     }
-  }, [messageId]);
+  }, [messageId, initialParentMessage]);
 
   useEffect(() => {
     if (shouldLoad && messageId) {
@@ -48,15 +67,33 @@ export const useThread = (messageId?: string, shouldLoad: boolean = false) => {
     if (!messageId) return;
 
     const handleNewMessage = (message: Message) => {
-      if (message.threadId === messageId) {
+      // If this is the parent message being created
+      if (message.id === messageId) {
+        setState(prev => ({
+          ...prev,
+          activeThread: {
+            parentMessage: message,
+            replies: prev.activeThread?.replies || [],
+            replyCount: prev.activeThread?.replyCount || 0,
+            lastReply: prev.activeThread?.lastReply
+          },
+          error: undefined
+        }));
+        // Load any existing replies
+        loadThreadMessages();
+      }
+      // If this is a reply to our thread
+      else if (message.threadId === messageId) {
         setState(prev => {
           if (!prev.activeThread) return prev;
+          
+          const newReplies = [...prev.activeThread.replies, message];
           return {
             ...prev,
             activeThread: {
               ...prev.activeThread,
-              replies: [...prev.activeThread.replies, message],
-              replyCount: prev.activeThread.replyCount + 1,
+              replies: newReplies,
+              replyCount: newReplies.length,
               lastReply: message
             }
           };
@@ -64,28 +101,16 @@ export const useThread = (messageId?: string, shouldLoad: boolean = false) => {
       }
     };
 
-    socket.on('message:created', handleNewMessage);
+    socket.on('thread:message_created', handleNewMessage);
 
     return () => {
-      socket.off('message:created', handleNewMessage);
+      socket.off('thread:message_created', handleNewMessage);
     };
-  }, [messageId]);
+  }, [messageId, loadThreadMessages]);
 
   const createThreadMessage = async (data: ThreadMessageInput) => {
     try {
       const message = await ThreadService.createThreadMessage(data);
-      setState(prev => {
-        if (!prev.activeThread) return prev;
-        return {
-          ...prev,
-          activeThread: {
-            ...prev.activeThread,
-            replies: [...prev.activeThread.replies, message],
-            replyCount: prev.activeThread.replyCount + 1,
-            lastReply: message
-          }
-        };
-      });
       return message;
     } catch (error) {
       setState(prev => ({

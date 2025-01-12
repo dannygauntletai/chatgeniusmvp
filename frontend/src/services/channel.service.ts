@@ -66,9 +66,12 @@ export class ChannelService {
 
   static async leaveChannel(channelId: string): Promise<void> {
     try {
+      console.log('Attempting to leave channel:', channelId);
       await api.post(`/api/channels/${channelId}/leave`, {});
+      console.log('Successfully left channel:', channelId);
       this.clearCache(); // Clear cache when channel membership changes
     } catch (error) {
+      console.error('Failed to leave channel:', error);
       // Ignore 400 errors as they might indicate user is not in channel
       if (error instanceof Error && !error.message.includes('status: 400')) {
         throw error;
@@ -79,5 +82,15 @@ export class ChannelService {
   static async removeMember(channelId: string, userId: string): Promise<void> {
     await api.post(`/api/channels/${channelId}/remove-member`, { userId });
     this.clearCache(); // Clear cache when channel membership changes
+  }
+
+  static async deleteChannel(channelId: string): Promise<void> {
+    try {
+      await api.delete(`/api/channels/${channelId}`);
+      this.clearCache(); // Clear cache after channel deletion
+    } catch (error) {
+      console.error('Failed to delete channel:', error);
+      throw error;
+    }
   }
 } 

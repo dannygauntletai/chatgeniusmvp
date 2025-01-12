@@ -21,10 +21,31 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
   const { userId, username } = useUserContext();
 
   useEffect(() => {
-    setMessage({
-      ...initialMessage,
-      reactions: initialMessage.reactions || {}
-    });
+    const handleMessageCreated = (newMessage: Message) => {
+      if (message.content === newMessage.content && (
+        message.id.startsWith('temp-') || message.id === newMessage.id
+      )) {
+        setMessage({
+          ...newMessage,
+          reactions: newMessage.reactions || {}
+        });
+      }
+    };
+
+    socket.on('message:created', handleMessageCreated);
+
+    return () => {
+      socket.off('message:created', handleMessageCreated);
+    };
+  }, [message.id, message.content]);
+
+  useEffect(() => {
+    if (!initialMessage.id.startsWith('temp-')) {
+      setMessage({
+        ...initialMessage,
+        reactions: initialMessage.reactions || {}
+      });
+    }
   }, [initialMessage]);
 
   useEffect(() => {
@@ -85,7 +106,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
     };
   }, [message.id]);
 
-  const handleThreadClick = () => {
+  const handleThreadClick = async () => {
+    if (message.id.startsWith('temp-')) {
+      console.log('Message is still being saved, waiting...');
+      return;
+    }
     openThread(message.id, message);
   };
 
@@ -181,7 +206,12 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
           {!isThreadParent && (
             <button
               onClick={handleThreadClick}
-              className="inline-flex items-center p-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full"
+              className={`inline-flex items-center p-1.5 text-xs font-medium rounded-full ${
+                message.id.startsWith('temp-')
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+              }`}
+              disabled={message.id.startsWith('temp-')}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />

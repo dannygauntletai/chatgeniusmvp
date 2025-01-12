@@ -200,6 +200,34 @@ export class ChannelController {
       const { channelId } = req.params;
       const userId = req.auth.userId;
 
+      console.log('Leave channel request:', { channelId, userId });
+
+      // First check the current membership status
+      const initialCheck = await prisma.channel.findUnique({
+        where: { id: channelId },
+        include: {
+          members: {
+            select: {
+              id: true,
+              username: true
+            }
+          }
+        }
+      });
+
+      if (!initialCheck) {
+        console.log('Channel not found during initial check:', channelId);
+        res.status(404).json({ message: 'Channel not found' });
+        return;
+      }
+
+      console.log('Initial membership status:', {
+        channelId,
+        userId,
+        isMember: initialCheck?.members.some(m => m.id === userId),
+        currentMembers: initialCheck?.members.map(m => ({ id: m.id, username: m.username }))
+      });
+
       const channel = await prisma.channel.findUnique({
         where: { id: channelId },
         include: {
@@ -209,42 +237,71 @@ export class ChannelController {
       });
 
       if (!channel) {
+        console.log('Channel not found:', channelId);
         res.status(404).json({ message: 'Channel not found' });
         return;
       }
 
       const existingMember = channel.members.some((member: { id: string }) => member.id === userId);
+      console.log('Membership check:', { 
+        existingMember, 
+        memberCount: channel.members.length,
+        isOwner: channel.ownerId === userId
+      });
+
       if (!existingMember) {
+        console.log('User not a member:', { userId, channelId });
         res.status(400).json({ message: 'Not a member of this channel' });
         return;
       }
 
       if (channel.ownerId === userId) {
+        console.log('Owner attempted to leave:', { userId, channelId });
         res.status(400).json({ message: 'Channel owner cannot leave the channel' });
         return;
       }
 
-      const updatedChannel = await prisma.channel.update({
-        where: { id: channelId },
-        data: {
-          members: {
-            disconnect: { id: userId }
+      try {
+        const updatedChannel = await prisma.channel.update({
+          where: { id: channelId },
+          data: {
+            members: {
+              disconnect: { id: userId }
+            }
+          },
+          include: {
+            members: {
+              select: {
+                id: true,
+                username: true
+              }
+            },
+            owner: true,
+            _count: {
+              select: { members: true }
+            }
           }
-        },
-        include: {
-          members: true,
-          owner: true
-        }
-      });
+        });
 
-      const channelWithMemberCount = {
-        ...updatedChannel,
-        memberCount: updatedChannel.members.length
-      };
+        console.log('Channel updated successfully:', {
+          channelId,
+          newMemberCount: updatedChannel._count.members,
+          memberIds: updatedChannel.members.map(m => m.id)
+        });
 
-      io.emit('channel:updated', channelWithMemberCount);
-      res.json(channelWithMemberCount);
+        io.emit('channel:member_left', { 
+          channelId, 
+          userId,
+          memberCount: updatedChannel._count?.members || 0
+        });
+
+        res.json(updatedChannel);
+      } catch (error) {
+        console.error('Prisma error during channel update:', error);
+        next(error);
+      }
     } catch (error) {
+      console.error('Error in leaveChannel:', error);
       next(error);
     }
   }
@@ -258,6 +315,45 @@ export class ChannelController {
       if (!userId) {
         res.status(401).json({ message: 'User not authenticated' });
         return;
+      }
+
+      console.log('Fetching channels for user:', userId);
+
+      // Check if this is the user's first login by looking for any channel membership
+      const userChannelCount = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          _count: {
+            select: {
+              channels: true
+            }
+          }
+        }
+      });
+
+      // Only auto-join public channels if user has no channel memberships
+      if (userChannelCount?._count.channels === 0) {
+        console.log('First login detected - auto-joining public channels');
+        
+        // Find all public channels
+        const publicChannels = await prisma.channel.findMany({
+          where: {
+            isPrivate: false,
+            name: { not: { startsWith: 'dm-' } }
+          }
+        });
+
+        // Add user to all public channels
+        if (publicChannels.length > 0) {
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              channels: {
+                connect: publicChannels.map(channel => ({ id: channel.id }))
+              }
+            }
+          });
+        }
       }
 
       // Single query to get both channels and DMs with pagination
@@ -325,6 +421,11 @@ export class ChannelController {
           skip
         })
       ]);
+
+      console.log('Found channels:', {
+        regularChannels: channels.map(c => ({ id: c.id, memberCount: c._count?.members })),
+        dmChannels: dms.map(d => ({ id: d.id, memberCount: d._count?.members }))
+      });
 
       res.json({
         channels,
@@ -443,6 +544,78 @@ export class ChannelController {
       return res.json(updatedChannel);
     } catch (error) {
       return next(error);
+    }
+  }
+
+  static async deleteChannel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { channelId } = req.params;
+      const userId = req.auth.userId;
+
+      console.log('Delete channel request:', { channelId, userId });
+
+      const channel = await prisma.channel.findUnique({
+        where: { id: channelId },
+        include: {
+          owner: true,
+          members: {
+            select: {
+              id: true
+            }
+          }
+        }
+      });
+
+      if (!channel) {
+        console.log('Channel not found:', channelId);
+        res.status(404).json({ message: 'Channel not found' });
+        return;
+      }
+
+      if (channel.ownerId !== userId) {
+        console.log('Non-owner attempted to delete channel:', { userId, ownerId: channel.ownerId });
+        res.status(403).json({ message: 'Only the channel owner can delete the channel' });
+        return;
+      }
+
+      // Delete in correct order to handle foreign key constraints
+      console.log('Starting channel deletion process...');
+
+      // 1. Delete all reactions for messages in this channel
+      await prisma.reaction.deleteMany({
+        where: {
+          message: {
+            channelId: channelId
+          }
+        }
+      });
+      console.log('Deleted all reactions in channel');
+
+      // 2. Delete all messages in this channel (this will cascade to thread messages)
+      await prisma.message.deleteMany({
+        where: {
+          channelId: channelId
+        }
+      });
+      console.log('Deleted all messages in channel');
+
+      // 3. Finally delete the channel
+      await prisma.channel.delete({
+        where: { id: channelId }
+      });
+
+      console.log('Channel deleted successfully:', channelId);
+
+      // Notify all members that the channel was deleted
+      io.emit('channel:deleted', { 
+        channelId,
+        memberIds: channel.members.map(m => m.id)
+      });
+
+      res.json({ message: 'Channel deleted successfully' });
+    } catch (error) {
+      console.error('Error in deleteChannel:', error);
+      next(error);
     }
   }
 } 
