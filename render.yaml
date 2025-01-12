@@ -25,8 +25,21 @@ services:
     staticPublishPath: ./frontend/dist
     routes:
       - type: rewrite
+        source: /sign-up
+        destination: /index.html
+      - type: rewrite
+        source: /sign-in
+        destination: /index.html
+      - type: rewrite
+        source: /dashboard/*
+        destination: /index.html
+      - type: rewrite
         source: /*
         destination: /index.html
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
     envVars:
       - key: VITE_API_URL
         value: https://chatgenius-backend.onrender.com
