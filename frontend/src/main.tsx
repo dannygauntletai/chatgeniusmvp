@@ -6,9 +6,11 @@ import { App } from './App';
 import './index.css';
 
 declare global {
-  const __CLERK_KEY__: string;
-  const __API_URL__: string;
-  const __WS_URL__: string;
+  interface Window {
+    __CLERK_KEY__: string;
+    __API_URL__: string;
+    __WS_URL__: string;
+  }
 }
 
 const queryClient = new QueryClient({
@@ -20,17 +22,25 @@ const queryClient = new QueryClient({
   },
 });
 
-console.log('Initializing Clerk...');
+console.log('Initializing Clerk...', {
+  key: window.__CLERK_KEY__?.substring(0, 10) + '...',
+  apiUrl: window.__API_URL__,
+});
+
+if (!window.__CLERK_KEY__) {
+  console.error('Clerk key is missing!');
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ClerkProvider 
-      publishableKey={__CLERK_KEY__}
+      publishableKey={window.__CLERK_KEY__}
       appearance={{
         baseTheme: undefined,
         variables: { colorPrimary: '#000000' },
         layout: { socialButtonsPlacement: 'bottom' }
       }}
+      navigate={(to) => window.location.href = to}
     >
       <QueryClientProvider client={queryClient}>
         <App />

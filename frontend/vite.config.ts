@@ -31,10 +31,10 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      // Expose all VITE_ prefixed env variables to the client
-      __CLERK_KEY__: JSON.stringify(env.VITE_CLERK_PUBLISHABLE_KEY),
-      __API_URL__: JSON.stringify(env.VITE_API_URL),
-      __WS_URL__: JSON.stringify(env.VITE_WS_URL),
+      // Make environment variables available globally
+      'window.__CLERK_KEY__': JSON.stringify(env.VITE_CLERK_PUBLISHABLE_KEY),
+      'window.__API_URL__': JSON.stringify(env.VITE_API_URL),
+      'window.__WS_URL__': JSON.stringify(env.VITE_WS_URL),
     },
   };
 }); 
