@@ -9,14 +9,74 @@ import { MessageItem } from './MessageItem';
 import { ThreadProvider } from '../../threads/context';
 import { ThreadView } from '../../threads/components/ThreadView';
 import { useThread } from '../../threads/context';
+import { UserService } from '../../../services/user.service';
+import { useUserContext } from '../../../contexts/UserContext';
 
-const ChannelHeader = ({ name }: { name: string }) => (
-  <div className="h-14 flex items-center px-6 border-b border-gray-600 bg-gray-800">
-    <h2 className="text-lg font-medium text-white">
-      {name.startsWith('@') ? name : `#${name}`}
-    </h2>
-  </div>
-);
+const ChannelHeader = ({ name }: { name: string }) => {
+  const [userStatus, setUserStatus] = useState<string | null>(null);
+  const { username: currentUsername } = useUserContext();
+  const [otherUsername, setOtherUsername] = useState<string>('');
+  const [otherUserId, setOtherUserId] = useState<string>('');
+
+  useEffect(() => {
+    const fetchUserStatus = async () => {
+      if (name.startsWith('dm-')) {
+        const usernames = name.substring(3).split('-');
+        const otherUser = usernames.find(u => u !== currentUsername) || '';
+        setOtherUsername(otherUser);
+
+        try {
+          const users = await UserService.getUsers();
+          const user = users.find(u => u.username === otherUser);
+          if (user) {
+            setOtherUserId(user.id);
+            setUserStatus(user.user_status || '😊');
+          }
+        } catch (error) {
+          console.error('Failed to fetch user status:', error);
+        }
+      }
+    };
+
+    fetchUserStatus();
+  }, [name, currentUsername]);
+
+  useEffect(() => {
+    if (!otherUserId) return;
+
+    const handleStatusUpdate = (data: { userId: string; status: string }) => {
+      if (data.userId === otherUserId) {
+        setUserStatus(data.status);
+      }
+    };
+
+    socket.on('user:status_updated', handleStatusUpdate);
+
+    return () => {
+      socket.off('user:status_updated', handleStatusUpdate);
+    };
+  }, [otherUserId]);
+
+  const displayName = name.startsWith('dm-') 
+    ? `@${otherUsername}`
+    : name.startsWith('#') ? name : `#${name}`;
+
+  return (
+    <div className="h-12 flex items-center px-6 border-b border-gray-600 bg-gray-800">
+      <div className="flex items-center gap-2">
+        <h2 className="text-lg font-medium text-white">
+          {displayName}
+        </h2>
+        {name.startsWith('dm-') && userStatus && (
+          <>
+            <span className="text-gray-300">-</span>
+            <span>{userStatus}</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const MessageListContent = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -75,7 +135,7 @@ const MessageListContent = () => {
         <ChannelHeader name={activeChannel.name} />
         <div 
           ref={messageListRef}
-          className="absolute inset-0 top-14 overflow-y-auto bg-gray-800"
+          className="absolute inset-0 top-12 overflow-y-auto bg-gray-800"
         >
           {loading ? (
             <div className="h-full flex items-center justify-center">
