@@ -1,14 +1,14 @@
-import { Request, Response, NextFunction } from 'express';
-import { AuthRequest } from '../types/request.types';
+import { Response, NextFunction } from 'express';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { ReactionService } from '../services/reaction.service';
 import { io } from '../app';
 
 export class ReactionController {
-  static async handleAddReaction(req: Request, res: Response, next: NextFunction) {
+  static async handleAddReaction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { messageId } = req.params;
       const { emoji } = req.body;
-      const userId = (req as AuthRequest).user.id;
+      const userId = req.auth.userId;
 
       const reaction = await ReactionService.addReaction(messageId, userId, emoji);
       
@@ -26,10 +26,10 @@ export class ReactionController {
     }
   }
 
-  static async handleRemoveReaction(req: Request, res: Response, next: NextFunction) {
+  static async handleRemoveReaction(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { messageId, emoji } = req.params;
-      const userId = (req as AuthRequest).user.id;
+      const userId = req.auth.userId;
 
       await ReactionService.removeReaction(messageId, userId, emoji);
       
@@ -45,7 +45,7 @@ export class ReactionController {
     }
   }
 
-  static async handleGetReactions(req: Request, res: Response, next: NextFunction) {
+  static async handleGetReactions(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { messageId } = req.params;
       const reactions = await ReactionService.getReactions(messageId);

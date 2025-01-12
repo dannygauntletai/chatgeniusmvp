@@ -1,13 +1,13 @@
-import { Request, Response, NextFunction } from 'express';
-import { AuthRequest } from '../types/request.types';
+import { Response, NextFunction } from 'express';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { ThreadService } from '../services/thread.service';
 import { io } from '../app';
 
 export class ThreadController {
-  static async createThreadMessage(req: Request, res: Response, next: NextFunction) {
+  static async createThreadMessage(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { content, parentMessageId } = req.body;
-      const userId = (req as AuthRequest).user.id;
+      const userId = req.auth.userId;
 
       const threadMessage = await ThreadService.createThreadMessage({
         content,
@@ -22,7 +22,7 @@ export class ThreadController {
     }
   }
 
-  static async getThreadMessages(req: Request, res: Response, next: NextFunction) {
+  static async getThreadMessages(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { parentMessageId } = req.params;
       const messages = await ThreadService.getThreadMessages(parentMessageId);
@@ -32,11 +32,11 @@ export class ThreadController {
     }
   }
 
-  static async updateThreadMessage(req: Request, res: Response, next: NextFunction) {
+  static async updateThreadMessage(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { messageId } = req.params;
       const { content } = req.body;
-      const userId = (req as AuthRequest).user.id;
+      const userId = req.auth.userId;
 
       const message = await ThreadService.updateThreadMessage(messageId, userId, { content });
       

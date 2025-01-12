@@ -1,14 +1,14 @@
 import { Router } from 'express';
 import { ChannelController } from '../controllers/channel.controller';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.middleware';
 
 const router = Router();
 
-router.use(authenticateToken);
+router.use(requireAuth);
 
-router.post('/', async (req, res, next) => ChannelController.createChannel(req, res, next));
-router.get('/', async (req, res, next) => ChannelController.getChannels(req, res, next));
-router.post('/:channelId/join', async (req, res, next) => ChannelController.joinChannel(req, res, next));
-router.post('/:channelId/leave', async (req, res, next) => ChannelController.leaveChannel(req, res, next));
+router.post('/', (req, res, next) => ChannelController.createChannel(req as unknown as AuthenticatedRequest, res, next));
+router.get('/', (req, res, next) => ChannelController.getChannels(req as unknown as AuthenticatedRequest, res, next));
+router.post('/:channelId/join', (req, res, next) => ChannelController.joinChannel(req as unknown as AuthenticatedRequest, res, next));
+router.post('/:channelId/leave', (req, res, next) => ChannelController.leaveChannel(req as unknown as AuthenticatedRequest, res, next));
 
 export default router; 

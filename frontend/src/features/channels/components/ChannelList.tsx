@@ -4,7 +4,7 @@ import { ChannelService } from '../../../services/channel.service';
 import { socket } from '../../../services/socket.service';
 import { CreateChannelModal } from './CreateChannelModal';
 import { useChannel } from '../context/ChannelContext';
-import { useUser } from '../../../contexts/UserContext';
+import { useUserContext } from '../../../contexts/UserContext';
 
 export const ChannelList = () => {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -12,7 +12,7 @@ export const ChannelList = () => {
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { activeChannel, setActiveChannel } = useChannel();
-  const { user } = useUser();
+  const { userId } = useUserContext();
 
   useEffect(() => {
     const loadChannels = async () => {
@@ -112,8 +112,8 @@ export const ChannelList = () => {
               <span className="text-sm text-gray-500">
                 {channel._count?.members || 0} members
               </span>
-              {channel.members?.some(m => m.id === user.id) && 
-               channel.ownerId !== user.id && (
+              {channel.members?.some(m => m.id === userId) && 
+               channel.ownerId !== userId && (
                 <button
                   onClick={async (e) => {
                     e.stopPropagation();

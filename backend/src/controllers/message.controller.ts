@@ -1,19 +1,24 @@
-import { Request, Response, NextFunction } from 'express';
-import { AuthRequest } from '../types/request.types';
+import { Response, NextFunction } from 'express';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { prisma } from '../lib/prisma';
 import { io } from '../app';
 
 export class MessageController {
-  static async createMessage(req: Request, res: Response, next: NextFunction) {
+  static async createMessage(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const { content, channelId } = req.body;
-      const userId = (req as AuthRequest).user.id;
+      const { content, channelId, threadId } = req.body;
+      const userId = req.auth.userId;
+
+      if (!content || !channelId) {
+        return res.status(400).json({ message: 'Content and channelId are required' });
+      }
 
       const message = await prisma.message.create({
         data: {
           content,
           channelId,
           userId,
+          threadId,
         },
         include: {
           user: {
@@ -32,11 +37,11 @@ export class MessageController {
     }
   }
 
-  static async updateMessage(req: Request, res: Response, next: NextFunction) {
+  static async updateMessage(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { messageId } = req.params;
       const { content } = req.body;
-      const userId = (req as AuthRequest).user.id;
+      const userId = req.auth.userId;
 
       const message = await prisma.message.update({
         where: { 
@@ -59,7 +64,7 @@ export class MessageController {
     }
   }
 
-  static async getChannelMessages(req: Request, res: Response, next: NextFunction) {
+  static async getChannelMessages(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { channelId } = req.params;
       const messages = await prisma.message.findMany({
@@ -75,7 +80,7 @@ export class MessageController {
           },
         },
         orderBy: {
-          createdAt: 'desc',
+          createdAt: 'asc',
         },
       });
       res.json(messages);

@@ -1,67 +1,82 @@
-import { Request, Response, NextFunction } from 'express';
-import { AuthRequest } from '../types/request.types';
-import { prisma } from '../lib/prisma';
+import { Response, NextFunction } from 'express';
+import { PrismaClient } from '@prisma/client';
 import { io } from '../app';
-import { Member } from '../types/channel.types';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
+
+const prisma = new PrismaClient();
+
+interface ChannelWithRelations {
+  id: string;
+  name: string;
+  isPrivate: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  ownerId: string;
+  owner: {
+    id: string;
+    username: string;
+  };
+  members: {
+    id: string;
+    username: string;
+  }[];
+}
 
 export class ChannelController {
-  static async createChannel(req: Request, res: Response, next: NextFunction) {
+  static async createChannel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const { name, isPrivate = false } = req.body;
-      const userId = (req as AuthRequest).user.id;
+      const { name, isPrivate } = req.body;
+      const userId = req.auth.userId;
 
       const channel = await prisma.channel.create({
         data: {
           name,
-          isPrivate,
-          ownerId: userId,
+          isPrivate: isPrivate || false,
+          owner: {
+            connect: { id: userId }
+          },
           members: {
             connect: { id: userId }
           }
         },
         include: {
-          owner: {
-            select: {
-              id: true,
-              username: true
-            }
-          },
-          members: {
-            select: {
-              id: true,
-              username: true
-            }
-          }
+          members: true,
+          owner: true
         }
       });
 
-      io.emit('channel:created', channel);
-      return res.status(201).json(channel);
+      const channelWithMemberCount = {
+        ...channel,
+        memberCount: channel.members.length
+      };
+
+      io.emit('channel:created', channelWithMemberCount);
+      res.status(201).json(channelWithMemberCount);
     } catch (error) {
-      return next(error);
+      next(error);
     }
   }
 
-  static async joinChannel(req: Request, res: Response, next: NextFunction) {
+  static async joinChannel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<Response | void> {
     try {
       const { channelId } = req.params;
-      const userId = (req as AuthRequest).user.id;
+      const userId = req.auth.userId;
 
       const channel = await prisma.channel.findUnique({
         where: { id: channelId },
-        include: { members: true }
+        include: {
+          members: true,
+          owner: true
+        }
       });
 
       if (!channel) {
-        return res.status(404).json({ error: 'Channel not found' });
+        return res.status(404).json({ message: 'Channel not found' });
       }
 
-      if (channel.members.some((m: Member) => m.id === userId)) {
-        return res.json(channel);
-      }
-
-      if (channel.isPrivate && channel.ownerId !== userId) {
-        return res.status(403).json({ error: 'Cannot join private channel' });
+      const existingMember = channel.members.some((member: { id: string }) => member.id === userId);
+      if (existingMember) {
+        return res.status(400).json({ message: 'Already a member of this channel' });
       }
 
       const updatedChannel = await prisma.channel.update({
@@ -72,80 +87,77 @@ export class ChannelController {
           }
         },
         include: {
-          members: {
-            select: {
-              id: true,
-              username: true
-            }
-          }
+          members: true,
+          owner: true
         }
       });
 
-      io.to(channelId).emit('channel:member_joined', {
-        channelId,
-        user: {
-          id: userId,
-          username: updatedChannel.members.find((m: { id: string; username: string }) => m.id === userId)?.username
-        }
-      });
-      return res.json(updatedChannel);
+      const channelWithMemberCount = {
+        ...updatedChannel,
+        memberCount: updatedChannel.members.length
+      };
+
+      io.emit('channel:updated', channelWithMemberCount);
+      return res.json(channelWithMemberCount);
     } catch (error) {
       return next(error);
     }
   }
 
-  static async leaveChannel(req: Request, res: Response, next: NextFunction) {
+  static async leaveChannel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<Response | void> {
     try {
       const { channelId } = req.params;
-      const userId = (req as AuthRequest).user.id;
+      const userId = req.auth.userId;
 
       const channel = await prisma.channel.findUnique({
         where: { id: channelId },
-        include: { members: true }
+        include: {
+          members: true,
+          owner: true
+        }
       });
 
       if (!channel) {
-        return res.status(404).json({ error: 'Channel not found' });
+        return res.status(404).json({ message: 'Channel not found' });
+      }
+
+      const existingMember = channel.members.some((member: { id: string }) => member.id === userId);
+      if (!existingMember) {
+        return res.status(400).json({ message: 'Not a member of this channel' });
       }
 
       if (channel.ownerId === userId) {
-        return res.status(403).json({ error: 'Channel owner cannot leave' });
+        return res.status(400).json({ message: 'Channel owner cannot leave the channel' });
       }
 
-      if (channel.members.some((m: Member) => m.id === userId)) {
-        const updatedChannel = await prisma.channel.update({
-          where: { id: channelId },
-          data: {
-            members: {
-              disconnect: { id: userId }
-            }
-          },
-          include: {
-            members: {
-              select: {
-                id: true,
-                username: true
-              }
-            }
+      const updatedChannel = await prisma.channel.update({
+        where: { id: channelId },
+        data: {
+          members: {
+            disconnect: { id: userId }
           }
-        });
+        },
+        include: {
+          members: true,
+          owner: true
+        }
+      });
 
-        io.to(channelId).emit('channel:member_left', {
-          channelId,
-          userId
-        });
-        return res.json(updatedChannel);
-      }
+      const channelWithMemberCount = {
+        ...updatedChannel,
+        memberCount: updatedChannel.members.length
+      };
 
-      return res.json(channel);
+      io.emit('channel:updated', channelWithMemberCount);
+      return res.json(channelWithMemberCount);
     } catch (error) {
       return next(error);
     }
   }
 
-  static async getChannels(req: Request, res: Response, next: NextFunction) {
+  static async getChannels(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const userId = (req as AuthRequest).user.id;
+      const userId = req.auth.userId;
 
       const channels = await prisma.channel.findMany({
         where: {
@@ -153,27 +165,27 @@ export class ChannelController {
             { isPrivate: false },
             {
               members: {
-                some: { id: userId }
+                some: {
+                  id: userId
+                }
               }
             }
           ]
         },
         include: {
-          owner: {
-            select: {
-              id: true,
-              username: true
-            }
-          },
-          _count: {
-            select: { members: true }
-          }
+          members: true,
+          owner: true
         }
       });
 
-      return res.json(channels);
+      const channelsWithMemberCount = channels.map((channel: ChannelWithRelations) => ({
+        ...channel,
+        memberCount: channel.members.length
+      }));
+
+      res.json(channelsWithMemberCount);
     } catch (error) {
-      return next(error);
+      next(error);
     }
   }
 } 

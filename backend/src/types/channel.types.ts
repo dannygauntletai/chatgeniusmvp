@@ -19,6 +19,6 @@ export interface Channel {
 }
 
 export interface Member {
-  id: string;
-  username: string;
+  channelId: string;
+  userId: string;
 } 

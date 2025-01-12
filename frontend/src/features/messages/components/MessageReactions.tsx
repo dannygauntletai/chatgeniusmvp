@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ReactionPicker } from './ReactionPicker';
 import { MessageService } from '../../../services/message.service';
 import { socket } from '../../../services/socket.service';
+import { useUserContext } from '../../../contexts/UserContext';
 
 interface Reaction {
   emoji: string;
@@ -24,11 +25,12 @@ export const MessageReactions: React.FC<MessageReactionsProps> = ({
   onReactionAdd,
   onReactionRemove,
 }) => {
+  const { userId } = useUserContext();
   const [showPicker, setShowPicker] = useState(false);
 
   const handleReactionClick = async (emoji: string) => {
     console.log('Clicking existing reaction:', emoji);
-    const hasReacted = reactions[emoji]?.some(user => user.id === 'test-user-id'); // Using test user ID
+    const hasReacted = reactions[emoji]?.some(user => user.id === userId);
     
     if (hasReacted) {
       console.log('Removing reaction:', emoji);

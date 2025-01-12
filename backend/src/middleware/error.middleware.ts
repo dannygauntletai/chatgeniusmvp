@@ -11,11 +11,28 @@ export const errorHandler = (
 
   if (err instanceof CustomError) {
     return res.status(err.statusCode).json({
-      error: err.message
+      error: {
+        message: err.message,
+        status: err.statusCode
+      }
     });
   }
 
+  // Handle Clerk errors
+  if (err.name === 'ClerkError') {
+    return res.status(401).json({
+      error: {
+        message: 'Authentication failed',
+        status: 401
+      }
+    });
+  }
+
+  // Default error
   return res.status(500).json({
-    error: 'Internal server error'
+    error: {
+      message: 'Internal server error',
+      status: 500
+    }
   });
 }; 

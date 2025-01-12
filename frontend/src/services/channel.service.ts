@@ -1,46 +1,30 @@
 import { Channel, ChannelCreateInput } from '../types/channel.types';
 import { socket } from './socket.service';
+import { api } from './api.service';
 
 export class ChannelService {
   static async getChannels(): Promise<Channel[]> {
-    const response = await fetch('/api/channels');
-    if (!response.ok) {
-      throw new Error('Failed to fetch channels');
-    }
-    return response.json();
+    console.log('Fetching channels...');
+    return api.get('/api/channels');
   }
 
   static async createChannel(data: ChannelCreateInput): Promise<Channel> {
-    const response = await fetch('/api/channels', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      throw new Error('Failed to create channel');
-    }
-    return response.json();
+    return api.post('/api/channels', data);
   }
 
   static async joinChannel(channelId: string): Promise<void> {
-    const response = await fetch(`/api/channels/${channelId}/join`, {
-      method: 'POST',
-    });
-    if (!response.ok) {
-      throw new Error('Failed to join channel');
-    }
+    await api.post(`/api/channels/${channelId}/join`, {});
     socket.emit('channel:join', channelId);
   }
 
   static async leaveChannel(channelId: string): Promise<void> {
-    const response = await fetch(`/api/channels/${channelId}/leave`, {
-      method: 'POST',
-    });
-    
-    if (!response.ok && response.status !== 400) {
-      throw new Error('Failed to leave channel');
+    try {
+      await api.post(`/api/channels/${channelId}/leave`, {});
+    } catch (error) {
+      // Ignore 400 errors as they might indicate user is not in channel
+      if (error instanceof Error && !error.message.includes('status: 400')) {
+        throw error;
+      }
     }
   }
 } 

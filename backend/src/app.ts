@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { initializeSocket } from './socket/connection';
 import { errorHandler } from './middleware/error.middleware';
+import { requireAuth } from './middleware/auth.middleware';
 import messageRoutes from './routes/message.routes';
 import channelRoutes from './routes/channel.routes';
 import threadRoutes from './routes/thread.routes';
@@ -25,11 +26,16 @@ initializeSocket(io);
 app.use(cors());
 app.use(express.json());
 
-// Routes
-app.use('/api/messages', messageRoutes);
-app.use('/api/messages', reactionRoutes);
-app.use('/api/channels', channelRoutes);
-app.use('/api/threads', threadRoutes);
+// Health check route (unprotected)
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Protected routes
+app.use('/api/messages', requireAuth, messageRoutes);
+app.use('/api/messages', requireAuth, reactionRoutes);
+app.use('/api/channels', requireAuth, channelRoutes);
+app.use('/api/threads', requireAuth, threadRoutes);
 
 // Error handling
 app.use(errorHandler);

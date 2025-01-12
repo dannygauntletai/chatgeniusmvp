@@ -17,16 +17,18 @@ const MessageListContent = () => {
   const { activeChannel } = useChannel();
   const { activeThreadId, activeThreadMessage, isThreadOpen, closeThread } = useThread();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
+  // Scroll to bottom on initial load and channel change
   useEffect(() => {
-    if (messages.length > 0) {
+    if (messages.length > 0 && !loading) {
       scrollToBottom();
     }
-  }, [messages, activeChannel?.id]);
+  }, [loading, activeChannel?.id]);
 
   useEffect(() => {
     if (!activeChannel) {
@@ -46,6 +48,8 @@ const MessageListContent = () => {
     const handleNewMessage = (message: Message) => {
       if (message.channelId === activeChannel.id && !message.threadId) {
         setMessages(prev => [...prev, message]);
+        // Use smooth scrolling for new messages
+        scrollToBottom('smooth');
       }
     };
 
@@ -62,10 +66,18 @@ const MessageListContent = () => {
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
-        {messages.map(message => (
-          <MessageItem key={message.id} message={message} />
-        ))}
+      <div 
+        ref={messageListRef}
+        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400"
+      >
+        <div className="flex flex-col min-h-full justify-end">
+          <div>
+            {messages.map(message => (
+              <MessageItem key={message.id} message={message} />
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
       </div>
       {isThreadOpen && activeThreadMessage && (
         <div className="w-96 border-l shadow-xl bg-white">

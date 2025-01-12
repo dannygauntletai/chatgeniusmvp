@@ -5,6 +5,7 @@ import { useThread } from '../../threads/context';
 import { MessageReactions } from './MessageReactions';
 import { MessageService } from '../../../services/message.service';
 import { socket } from '../../../services/socket.service';
+import { useUserContext } from '../../../contexts/UserContext';
 
 interface MessageItemProps {
   message: Message;
@@ -12,11 +13,18 @@ interface MessageItemProps {
 }
 
 export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessage, isThreadParent }) => {
-  const [message, setMessage] = useState(initialMessage);
+  const [message, setMessage] = useState({
+    ...initialMessage,
+    reactions: initialMessage.reactions || {}
+  });
   const { openThread } = useThread();
+  const { userId, username } = useUserContext();
 
   useEffect(() => {
-    setMessage(initialMessage);
+    setMessage({
+      ...initialMessage,
+      reactions: initialMessage.reactions || {}
+    });
   }, [initialMessage]);
 
   useEffect(() => {
@@ -25,7 +33,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
         const reactions = await MessageService.getReactions(message.id);
         setMessage(prevMessage => ({
           ...prevMessage,
-          reactions: reactions
+          reactions: reactions || {}
         }));
       } catch (error) {
         console.error('Failed to load reactions:', error);
@@ -89,7 +97,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
         if (!updatedReactions[emoji]) {
           updatedReactions[emoji] = [];
         }
-        const currentUser = { id: 'test-user-id', username: 'current-user' };
+        const currentUser = { id: userId, username };
         if (!updatedReactions[emoji].some(user => user.id === currentUser.id)) {
           updatedReactions[emoji].push(currentUser);
         }
@@ -99,7 +107,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
       await MessageService.addReaction(messageId, emoji);
     } catch (error) {
       console.error('Failed to add reaction:', error);
-      setMessage(initialMessage);
+      setMessage(prevMessage => ({
+        ...prevMessage,
+        reactions: message.reactions || {}
+      }));
     }
   };
 
@@ -110,7 +121,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
         const updatedReactions = { ...prevMessage.reactions };
         if (updatedReactions[emoji]) {
           updatedReactions[emoji] = updatedReactions[emoji].filter(
-            user => user.id !== 'test-user-id'
+            user => user.id !== userId
           );
           if (updatedReactions[emoji].length === 0) {
             delete updatedReactions[emoji];
@@ -122,9 +133,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
       await MessageService.removeReaction(messageId, emoji);
     } catch (error) {
       console.error('Failed to remove reaction:', error);
-      setMessage(initialMessage);
+      setMessage(prevMessage => ({
+        ...prevMessage,
+        reactions: message.reactions || {}
+      }));
     }
   };
+
+  const isOwnMessage = message.userId === userId;
 
   if (!message || !message.user) {
     return null;
@@ -159,7 +175,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
         <div className="mt-2 flex items-center space-x-2">
           <MessageReactions
             messageId={message.id}
-            reactions={message.reactions || {}}
+            reactions={message.reactions}
             onReactionAdd={handleReactionAdd}
             onReactionRemove={handleReactionRemove}
           />
