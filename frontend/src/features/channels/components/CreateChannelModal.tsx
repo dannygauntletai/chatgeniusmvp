@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChannelService } from '../../../services/channel.service';
+import { Modal } from '../../shared/components/Modal';
 
 interface CreateChannelModalProps {
   isOpen: boolean;
@@ -27,29 +28,19 @@ export const CreateChannelModal = ({ isOpen, onClose }: CreateChannelModalProps)
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-      onClick={onClose}
-      style={{ backdropFilter: 'blur(4px)' }}
-    >
-      <div 
-        className="bg-white rounded-lg p-6 w-96 relative"
-        onClick={e => e.stopPropagation()}
-      >
-        <h2 className="text-xl font-bold mb-4">Create Channel</h2>
+    <Modal isOpen={isOpen} onClose={onClose} title="Create Channel">
+      <div className="p-4">
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">
+            <label className="block text-sm font-medium mb-1 text-gray-700">
               Channel Name
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border rounded focus:outline-none focus:border-primary text-black"
               placeholder="e.g. general"
               required
             />
@@ -62,7 +53,7 @@ export const CreateChannelModal = ({ isOpen, onClose }: CreateChannelModalProps)
                 onChange={(e) => setIsPrivate(e.target.checked)}
                 className="mr-2"
               />
-              <span className="text-sm">Private Channel</span>
+              <span className="text-sm text-gray-700">Private Channel</span>
             </label>
           </div>
           {error && (
@@ -79,13 +70,13 @@ export const CreateChannelModal = ({ isOpen, onClose }: CreateChannelModalProps)
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50"
+              className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 disabled:opacity-50"
             >
               {loading ? 'Creating...' : 'Create Channel'}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }; 

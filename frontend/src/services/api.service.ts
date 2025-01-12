@@ -1,92 +1,42 @@
-const API_URL = import.meta.env.VITE_API_URL;
-console.log('API URL configured as:', API_URL);
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-let currentToken: string | null = null;
+let authToken: string | null = null;
 
 export const setAuthToken = (token: string | null) => {
-  console.log('Setting auth token:', token ? 'yes' : 'no');
-  if (token) {
-    // Log token format for debugging (safely)
-    console.log('Token format:', {
-      length: token.length,
-      prefix: token.substring(0, 10) + '...',
-      isJWT: token.split('.').length === 3
-    });
-  }
-  currentToken = token;
+  authToken = token;
 };
 
-async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
-  const fullUrl = `${API_URL}${endpoint}`;
-  console.log('Making request to:', fullUrl);
-  console.log('Token available:', currentToken ? 'yes' : 'no');
-
-  const defaultHeaders: HeadersInit = {
+const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
+  const headers = {
     'Content-Type': 'application/json',
+    ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+    ...options.headers,
   };
 
-  if (currentToken) {
-    defaultHeaders.Authorization = `Bearer ${currentToken}`;
-    // Log authorization header format (safely)
-    console.log('Authorization header format:', {
-      prefix: 'Bearer',
-      tokenLength: currentToken.length,
-      tokenPrefix: currentToken.substring(0, 10) + '...'
-    });
-  } else {
-    console.warn('No token available for authenticated request to:', fullUrl);
-  }
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
 
-  try {
-    const response = await fetch(fullUrl, {
-      ...options,
-      headers: {
-        ...defaultHeaders,
-        ...options.headers,
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('API Error:', {
-        url: fullUrl,
-        endpoint,
-        status: response.status,
-        statusText: response.statusText,
-        error: errorText,
-        hasToken: !!currentToken
-      });
-
-      // Don't redirect on 401, let the auth system handle it
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return response.json();
-  } catch (error: unknown) {
-    console.error('API request failed:', {
-      url: fullUrl,
-      endpoint,
-      error: error instanceof Error ? error.message : String(error),
-      hasToken: !!currentToken
-    });
+  if (!response.ok) {
+    const error = new Error(`HTTP error! status: ${response.status}`);
+    (error as any).status = response.status;
     throw error;
   }
-}
+
+  const data = await response.json();
+  return data;
+};
 
 export const api = {
   get: (endpoint: string) => fetchWithAuth(endpoint),
-  
-  post: (endpoint: string, data: any) => fetchWithAuth(endpoint, {
-    method: 'POST',
-    body: JSON.stringify(data),
+  post: (endpoint: string, body: any) => fetchWithAuth(endpoint, { 
+    method: 'POST', 
+    body: JSON.stringify(body) 
   }),
-  
-  put: (endpoint: string, data: any) => fetchWithAuth(endpoint, {
-    method: 'PUT',
-    body: JSON.stringify(data),
+  put: (endpoint: string, body: any) => fetchWithAuth(endpoint, { 
+    method: 'PUT', 
+    body: JSON.stringify(body) 
   }),
-  
-  delete: (endpoint: string) => fetchWithAuth(endpoint, {
-    method: 'DELETE',
-  }),
+  delete: (endpoint: string) => fetchWithAuth(endpoint, { method: 'DELETE' }),
 }; 

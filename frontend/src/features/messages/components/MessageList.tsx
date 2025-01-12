@@ -60,15 +60,27 @@ const MessageListContent = () => {
   }, [activeChannel?.id]);
 
   if (!activeChannel) return <EmptyState message="Select a channel to start chatting" />;
-  if (loading) return <LoadingSpinner />;
-  if (error) return <div className="p-4 text-red-500">{error}</div>;
+  if (loading) return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex items-center justify-center">
+        <LoadingSpinner />
+      </div>
+    </div>
+  );
+  if (error) return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-red-500">{error}</div>
+      </div>
+    </div>
+  );
   if (messages.length === 0) return <EmptyState message="No messages yet" />;
 
   return (
     <div className="flex-1 flex overflow-hidden">
       <div 
         ref={messageListRef}
-        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400"
+        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 bg-gray-800"
       >
         <div className="flex flex-col min-h-full justify-end">
           <div>
@@ -80,7 +92,7 @@ const MessageListContent = () => {
         </div>
       </div>
       {isThreadOpen && activeThreadMessage && (
-        <div className="w-96 border-l shadow-xl bg-white">
+        <div className="w-96 border-l border-gray-700 shadow-xl bg-gray-800">
           <ThreadView
             parentMessageId={activeThreadId!}
             onClose={closeThread}

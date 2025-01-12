@@ -14,13 +14,15 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   threadParentId
 }) => {
   const [content, setContent] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const { activeChannel } = useChannel();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim()) return;
+    if (!content.trim() || isSending) return;
 
     try {
+      setIsSending(true);
       if (onSend) {
         await onSend(content.trim());
       } else if (threadParentId) {
@@ -37,6 +39,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       setContent('');
     } catch (error) {
       console.error('Failed to send message:', error);
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -51,12 +55,13 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder={placeholder}
-            className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:border-primary"
+            className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:border-primary text-black"
+            disabled={isSending}
           />
           <button
             type="submit"
             disabled={!content.trim()}
-            className="px-4 py-2 bg-primary text-white rounded-lg disabled:opacity-50"
+            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-900 disabled:opacity-50 transition-colors"
           >
             Send
           </button>

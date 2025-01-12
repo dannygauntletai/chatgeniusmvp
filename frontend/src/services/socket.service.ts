@@ -3,7 +3,7 @@ import { Message } from '../types/message.types';
 
 const SOCKET_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000';
 
-export const socket = io(SOCKET_URL) as typeof Socket;
+export const socket = io(SOCKET_URL);
 
 export const initializeSocket = () => {
   socket.on('connect', () => {

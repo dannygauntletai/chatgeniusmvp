@@ -147,10 +147,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
   }
 
   return (
-    <div className="group relative flex items-start space-x-3 py-4 px-4 hover:bg-gray-50">
+    <div className="group relative flex items-start space-x-3 py-4 px-4 hover:bg-gray-700">
       <div className="flex-shrink-0">
-        <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
-          <span className="text-sm font-medium text-gray-700">
+        <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
+          <span className="text-sm font-medium text-white">
             {message.user.username[0].toUpperCase()}
           </span>
         </div>
@@ -159,16 +159,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-900">
-              {message.user.username}
-            </span>
-            <span className="text-sm text-gray-500">
+            <span className="font-medium text-white">{message.user.username}</span>
+            <span className="text-xs text-gray-300">
               {formatRelativeTime(new Date(message.createdAt))}
             </span>
           </div>
         </div>
 
-        <div className="mt-1 text-sm text-gray-700">
+        <div className="mt-1 text-sm text-white">
           {message.content}
         </div>
 

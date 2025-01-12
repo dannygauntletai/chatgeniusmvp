@@ -5,23 +5,6 @@ import { AuthenticatedRequest } from '../middleware/auth.middleware';
 
 const prisma = new PrismaClient();
 
-interface ChannelWithRelations {
-  id: string;
-  name: string;
-  isPrivate: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-  ownerId: string;
-  owner: {
-    id: string;
-    username: string;
-  };
-  members: {
-    id: string;
-    username: string;
-  }[];
-}
-
 export class ChannelController {
   static async createChannel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
@@ -162,28 +145,50 @@ export class ChannelController {
       const channels = await prisma.channel.findMany({
         where: {
           OR: [
-            { isPrivate: false },
+            { 
+              AND: [
+                { isPrivate: false },
+                { name: { not: { startsWith: 'dm-' } } }
+              ]
+            },
             {
-              members: {
-                some: {
-                  id: userId
-                }
-              }
+              AND: [
+                { members: { some: { id: userId } } },
+                { name: { not: { startsWith: 'dm-' } } }
+              ]
             }
           ]
         },
         include: {
           members: true,
-          owner: true
+          owner: true,
+          _count: {
+            select: { members: true }
+          }
         }
       });
 
-      const channelsWithMemberCount = channels.map((channel: ChannelWithRelations) => ({
-        ...channel,
-        memberCount: channel.members.length
-      }));
+      const dms = await prisma.channel.findMany({
+        where: {
+          AND: [
+            { name: { startsWith: 'dm-' } },
+            { ownerId: userId },
+            { members: { some: { id: userId } } }
+          ]
+        },
+        include: {
+          members: true,
+          owner: true,
+          _count: {
+            select: { members: true }
+          }
+        }
+      });
 
-      res.json(channelsWithMemberCount);
+      res.json({
+        channels,
+        directMessages: dms
+      });
     } catch (error) {
       next(error);
     }

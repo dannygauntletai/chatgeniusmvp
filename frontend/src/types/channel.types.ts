@@ -21,4 +21,5 @@ export interface Channel {
 export interface ChannelCreateInput {
   name: string;
   isPrivate: boolean;
+  members?: string[]; // Array of user IDs to add as members
 } 

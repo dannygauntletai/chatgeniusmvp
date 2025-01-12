@@ -2,8 +2,13 @@ import { Channel, ChannelCreateInput } from '../types/channel.types';
 import { socket } from './socket.service';
 import { api } from './api.service';
 
+interface ChannelResponse {
+  channels: Channel[];
+  directMessages: Channel[];
+}
+
 export class ChannelService {
-  static async getChannels(): Promise<Channel[]> {
+  static async getChannels(): Promise<ChannelResponse> {
     console.log('Fetching channels...');
     return api.get('/api/channels');
   }
