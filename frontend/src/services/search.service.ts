@@ -1,63 +1,51 @@
 import { FileObject, fileService } from './file.service';
 
+export type SearchResultType = 'message' | 'file' | 'channel';
+export type SearchLocation = 'Files' | 'Messages' | string; // string for channel names
+
 export interface SearchResult {
-  type: 'message' | 'file';
+  type: SearchResultType;
   id: string;
-  title: string;
-  content: string;
-  channelId?: string;
-  channelName?: string;
-  timestamp?: string;
-  fileUrl?: string;
-  fileType?: string;
-  fileSize?: number;
+  location: SearchLocation;  // Where the result was found (Files, Messages, or channel name)
+  content: string;          // The actual content to display and highlight
+  metadata?: {             // Optional metadata specific to each type
+    channelId?: string;
+    channelName?: string;
+    timestamp?: string;
+    fileUrl?: string;
+    fileType?: string;
+    fileSize?: number;
+  };
 }
 
-class SearchService {
-  async searchAll(query: string): Promise<SearchResult[]> {
-    if (!query.trim()) return [];
+interface SearchProvider {
+  type: SearchResultType;
+  search: (query: string) => Promise<SearchResult[]>;
+}
 
-    try {
-      const [messageResults, fileResults] = await Promise.all([
-        this.searchMessages(query),
-        this.searchFiles(query)
-      ]);
+class FileSearchProvider implements SearchProvider {
+  type: SearchResultType = 'file';
 
-      return [...messageResults, ...fileResults];
-    } catch (error) {
-      console.error('Search error:', error);
-      throw error;
-    }
-  }
-
-  async searchMessages(query: string): Promise<SearchResult[]> {
-    if (!query.trim()) return [];
-
-    // TODO: Implement real message search when backend is ready
-    // For now, return empty array
-    return [];
-  }
-
-  async searchFiles(query: string): Promise<SearchResult[]> {
+  async search(query: string): Promise<SearchResult[]> {
     if (!query.trim()) return [];
 
     try {
       const files = await fileService.listFiles();
+      const searchTerm = query.toLowerCase();
       
       return files
-        .filter(file => 
-          file.name.toLowerCase().includes(query.toLowerCase()) ||
-          file.type.toLowerCase().includes(query.toLowerCase())
-        )
+        .filter(file => file.name.toLowerCase().includes(searchTerm))
         .map(file => ({
-          type: 'file',
+          type: this.type,
           id: file.id,
-          title: file.name,
-          content: `${file.type} - ${formatFileSize(file.size)}`,
-          fileUrl: file.url,
-          fileType: file.type,
-          fileSize: file.size,
-          timestamp: file.createdAt
+          location: 'Files',
+          content: file.name,
+          metadata: {
+            fileUrl: file.url,
+            fileType: file.type,
+            fileSize: file.size,
+            timestamp: file.createdAt
+          }
         }));
     } catch (error) {
       console.error('File search error:', error);
@@ -66,13 +54,55 @@ class SearchService {
   }
 }
 
-// Helper function to format file size
-const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-};
+class MessageSearchProvider implements SearchProvider {
+  type: SearchResultType = 'message';
+
+  async search(query: string): Promise<SearchResult[]> {
+    if (!query.trim()) return [];
+
+    // TODO: Implement real message search when backend is ready
+    // Example implementation:
+    // const messages = await messageService.searchMessages(query);
+    // return messages.map(msg => ({
+    //   type: this.type,
+    //   id: msg.id,
+    //   location: msg.channelName,
+    //   content: msg.text,
+    //   metadata: {
+    //     channelId: msg.channelId,
+    //     channelName: msg.channelName,
+    //     timestamp: msg.timestamp
+    //   }
+    // }));
+    return [];
+  }
+}
+
+class SearchService {
+  private providers: SearchProvider[] = [
+    new FileSearchProvider(),
+    new MessageSearchProvider()
+  ];
+
+  async searchAll(query: string): Promise<SearchResult[]> {
+    if (!query.trim()) return [];
+
+    try {
+      const results = await Promise.all(
+        this.providers.map(provider => provider.search(query))
+      );
+
+      return results.flat();
+    } catch (error) {
+      console.error('Search error:', error);
+      throw error;
+    }
+  }
+
+  // Method to add new search providers
+  registerProvider(provider: SearchProvider) {
+    this.providers.push(provider);
+  }
+}
 
 export const searchService = new SearchService(); 

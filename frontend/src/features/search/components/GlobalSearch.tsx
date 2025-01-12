@@ -46,7 +46,7 @@ export const GlobalSearch = ({ onOpenFileBrowser }: GlobalSearchProps) => {
 
   return (
     <>
-      <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 bg-gray-900 border-b border-gray-700">
+      <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 bg-gray-1100 border-b border-gray-600">
         <button
           className="w-full px-4 py-2 text-sm text-gray-400 bg-gray-800 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left"
           onClick={() => setOpen(true)}
@@ -67,28 +67,30 @@ export const GlobalSearch = ({ onOpenFileBrowser }: GlobalSearchProps) => {
       >
         <div className="fixed inset-0 z-50" aria-hidden="true">
           <div className="fixed inset-0 bg-gray-900/50" onClick={() => setOpen(false)} />
-          <div className="fixed inset-x-0 top-[20vh] mx-auto max-w-2xl">
-            <div className="relative bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
+          <div className="fixed inset-x-0 top-[15vh] mx-auto max-w-3xl">
+            <div className="relative bg-gray-800 rounded-xl shadow-2xl overflow-hidden min-h-[400px] flex flex-col">
               <Command.Input
                 value={query}
                 onValueChange={setQuery}
-                className="w-full px-4 py-3 text-sm text-white bg-transparent border-b border-gray-700 focus:outline-none"
+                className="w-full px-6 py-4 text-sm text-white bg-transparent border-b border-gray-700 focus:outline-none"
                 placeholder="Search messages and files..."
                 autoFocus
               />
 
-              <Command.List className="max-h-[300px] overflow-y-auto p-2">
+              <Command.List className="flex-1 overflow-y-auto p-4 relative">
                 {isLoading && (
                   <Command.Loading>
-                    <div className="flex items-center justify-center py-4">
+                    <div className="absolute inset-0 flex items-center justify-center">
                       <LoadingSpinner />
                     </div>
                   </Command.Loading>
                 )}
 
                 {!isLoading && query && results.length === 0 && (
-                  <Command.Empty className="py-4 text-sm text-gray-400 text-center">
-                    No results found
+                  <Command.Empty>
+                    <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-400">
+                      No results found
+                    </div>
                   </Command.Empty>
                 )}
 
