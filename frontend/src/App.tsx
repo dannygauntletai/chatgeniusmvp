@@ -10,6 +10,7 @@ import { MessageInput } from './features/messages/components/MessageInput';
 import { useEffect, useState } from 'react';
 import { setAuthToken } from './services/api.service';
 import { socket, connectSocket, disconnectSocket } from './services/socket.service';
+import { LoadingSpinner } from './features/shared/components/LoadingSpinner';
 
 console.log('App component rendering');
 
@@ -113,7 +114,14 @@ const AppRoutes = () => {
   const location = useLocation();
 
   if (!clerk.loaded || !isLoaded) {
-    return <div>Loading app...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="flex flex-col items-center gap-3">
+          <LoadingSpinner className="h-8 w-8" />
+          <div className="text-gray-400">Loading ChatGenius...</div>
+        </div>
+      </div>
+    );
   }
 
   return (
