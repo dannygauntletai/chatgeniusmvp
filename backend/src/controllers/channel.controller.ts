@@ -9,6 +9,8 @@ export class ChannelController {
       const { name, isPrivate = false, members = [] } = req.body;
       const userId = req.auth.userId;
 
+      console.log('Creating channel:', { name, isPrivate, members, userId });
+
       if (!name) {
         res.status(400).json({ message: 'Channel name is required' });
         return;
@@ -16,36 +18,51 @@ export class ChannelController {
 
       // For DM channels, ensure both users are included as members
       if (name.startsWith('dm-')) {
+        console.log('Creating DM channel...');
+        
         // Validate members array
         if (!Array.isArray(members) || members.length !== 2) {
+          console.error('Invalid members array:', members);
           res.status(400).json({ message: 'DM channels require exactly two members' });
           return;
         }
 
         // Get both users' information
+        console.log('Finding users:', members);
         const [user1, user2] = await Promise.all([
           prisma.user.findUnique({ where: { id: members[0] } }),
           prisma.user.findUnique({ where: { id: members[1] } })
         ]);
 
         if (!user1 || !user2) {
+          console.error('Users not found:', { user1Id: members[0], user2Id: members[1] });
           res.status(404).json({ message: 'One or both users not found' });
           return;
         }
 
-        // Sort usernames alphabetically to ensure consistent channel naming
-        const sortedUsernames = [user1.username, user2.username].sort();
-        const dmChannelName = `dm-${sortedUsernames[0]}-${sortedUsernames[1]}`;
+        console.log('Found users:', { user1: user1.username, user2: user2.username });
 
-        // Check if DM channel already exists
+        // Generate DM channel name with 'dm-' prefix
+        const dmChannelName = `dm-${user1.username}-${user2.username}`;
+        console.log('Generated DM channel name:', dmChannelName);
+
+        // Check if DM channel already exists (check both name combinations)
+        const alternativeDmChannelName = `dm-${user2.username}-${user1.username}`;
+        console.log('Checking for existing channels with names:', { dmChannelName, alternativeDmChannelName });
+        
         const existingChannel = await prisma.channel.findFirst({
           where: {
-            name: dmChannelName,
-            isPrivate: true,
-            members: {
-              every: {
-                id: {
-                  in: [members[0], members[1]]
+            OR: [
+              { name: dmChannelName },
+              { name: alternativeDmChannelName }
+            ],
+            AND: {
+              isPrivate: true,
+              members: {
+                every: {
+                  id: {
+                    in: [members[0], members[1]]
+                  }
                 }
               }
             }
@@ -60,37 +77,46 @@ export class ChannelController {
         });
 
         if (existingChannel) {
+          console.log('Found existing DM channel:', existingChannel.id);
           res.json(existingChannel);
           return;
         }
 
+        console.log('Creating new DM channel...');
         // Create new DM channel with both users
-        const channel = await prisma.channel.create({
-          data: {
-            name: dmChannelName,
-            isPrivate: true,
-            owner: {
-              connect: { id: members[0] }
+        try {
+          const channel = await prisma.channel.create({
+            data: {
+              name: dmChannelName,
+              isPrivate: true,
+              owner: {
+                connect: { id: members[0] }
+              },
+              members: {
+                connect: [{ id: members[0] }, { id: members[1] }]
+              }
             },
-            members: {
-              connect: [{ id: members[0] }, { id: members[1] }]
+            include: {
+              members: true,
+              owner: true,
+              _count: {
+                select: { members: true }
+              }
             }
-          },
-          include: {
-            members: true,
-            owner: true,
-            _count: {
-              select: { members: true }
-            }
-          }
-        });
+          });
 
-        io.emit('channel:created', channel);
-        res.status(201).json(channel);
-        return;
+          console.log('DM channel created successfully:', channel.id);
+          io.emit('channel:created', channel);
+          res.status(201).json(channel);
+          return;
+        } catch (error) {
+          console.error('Error creating DM channel:', error);
+          throw error;
+        }
       }
 
       // For regular channels
+      console.log('Creating regular channel...');
       const channel = await prisma.channel.create({
         data: {
           name,
@@ -111,9 +137,11 @@ export class ChannelController {
         }
       });
 
+      console.log('Regular channel created successfully:', channel.id);
       io.emit('channel:created', channel);
       res.status(201).json(channel);
     } catch (error) {
+      console.error('Error in createChannel:', error);
       next(error);
     }
   }
