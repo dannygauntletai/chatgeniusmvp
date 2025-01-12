@@ -1,80 +1,53 @@
 import { useState, useEffect } from 'react';
-import { Channel } from '../../../types/channel.types';
-import { useChannel } from '../../channels/context/ChannelContext';
-import { useUserContext } from '../../../contexts/UserContext';
+import { useAuth } from '@clerk/clerk-react';
 import { socket } from '../../../services/socket.service';
 import { ChannelService } from '../../../services/channel.service';
+import { useChannel } from '../../channels/context/ChannelContext';
+import { Channel } from '../../../types/channel.types';
 
-interface ChannelMemberUpdate {
-  channelId: string;
-  user: {
-    id: string;
-    username: string;
-  };
-}
-
-interface UserStatuses {
-  [userId: string]: string;
+interface ChannelMember {
+  id: string;
+  username: string;
+  status?: string;
 }
 
 export const DMList = () => {
-  const [dms, setDms] = useState<Channel[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [userStatuses, setUserStatuses] = useState<UserStatuses>({});
+  const [userStatuses, setUserStatuses] = useState<Record<string, string>>({});
+  const auth = useAuth();
   const { activeChannel, setActiveChannel } = useChannel();
-  const { userId } = useUserContext();
+  const userId = auth.userId;
 
   useEffect(() => {
-    const loadDMs = async () => {
+    const loadChannels = async () => {
       try {
-        setLoading(true);
-        const data = await ChannelService.getChannels();
-        console.log('Loaded DMs:', data.directMessages);
-        setDms(data.directMessages);
+        const response = await ChannelService.getChannels();
+        const dmChannels = (Array.isArray(response) ? response : []).filter(
+          (channel: Channel) => channel.name.startsWith('dm-')
+        );
+        setChannels(dmChannels);
 
         // Initialize user statuses
-        const initialStatuses: UserStatuses = {};
-        data.directMessages.forEach(dm => {
-          const otherMember = dm.members.find(member => member.id !== userId);
+        const initialStatuses: Record<string, string> = {};
+        dmChannels.forEach((channel: Channel) => {
+          const otherMember = channel.members.find((member: ChannelMember) => member.id !== userId) as ChannelMember;
           if (otherMember) {
             initialStatuses[otherMember.id] = otherMember.status || 'offline';
           }
         });
         setUserStatuses(initialStatuses);
-        setError(null);
-      } catch (err) {
-        setError('Failed to load direct messages');
-        console.error('Error loading DMs:', err);
+      } catch (error) {
+        setError('Failed to load channels');
       } finally {
         setLoading(false);
       }
     };
 
-    loadDMs();
-
-    // Listen for new DM channels
-    const handleNewChannel = (channel: Channel) => {
-      if (channel.name.startsWith('dm-') && channel.members.some(member => member.id === userId)) {
-        setDms(prevDms => [...prevDms, channel]);
-      }
-    };
-
-    // Listen for user status changes
-    const handleStatusChange = ({ userId, status }: { userId: string; status: string }) => {
-      setUserStatuses(prev => ({
-        ...prev,
-        [userId]: status
-      }));
-    };
-
-    socket.on('channel:created', handleNewChannel);
-    socket.on('user:status_changed', handleStatusChange);
-
-    return () => {
-      socket.off('channel:created', handleNewChannel);
-      socket.off('user:status_changed', handleStatusChange);
-    };
+    if (userId) {
+      loadChannels();
+    }
   }, [userId]);
 
   const handleDMClick = (dm: Channel) => {
@@ -105,7 +78,7 @@ export const DMList = () => {
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="space-y-1">
-        {dms.map(dm => {
+        {channels.map(dm => {
           const otherMember = dm.members.find(member => member.id !== userId);
           if (!otherMember) {
             console.log('No other member found in channel:', dm.id);

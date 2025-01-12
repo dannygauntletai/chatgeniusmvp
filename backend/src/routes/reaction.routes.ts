@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { ReactionController } from '../controllers/reaction.controller';
-import { requireAuth, AuthenticatedRequest } from '../middleware/auth.middleware';
+import { AuthenticatedRequest } from '../types/request.types';
+import { requireAuth } from '../middleware/auth.middleware';
 
 const router = Router();
 

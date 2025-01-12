@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { ChannelController } from '../controllers/channel.controller';
-import { AuthenticatedRequest } from '../middleware/auth.middleware';
+import { AuthenticatedRequest } from '../types/request.types';
+import { requireAuth } from '../middleware/auth.middleware';
 
 const router = Router();
+
+// Apply auth middleware to all routes
+router.use(requireAuth);
 
 router.post('/', (req, res, next) => ChannelController.createChannel(req as unknown as AuthenticatedRequest, res, next));
 router.get('/', (req, res, next) => ChannelController.getChannels(req as unknown as AuthenticatedRequest, res, next));

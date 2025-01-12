@@ -20,7 +20,11 @@ export const handleReactionEvents = (socket: Socket) => {
         },
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      if (error && typeof error === 'object' && 'message' in error) {
+        socket.emit('error', { message: error.message });
+      } else {
+        socket.emit('error', { message: 'An unknown error occurred' });
+      }
     }
   });
 
@@ -40,7 +44,11 @@ export const handleReactionEvents = (socket: Socket) => {
         userId: data.userId,
       });
     } catch (error) {
-      socket.emit('error', { message: error.message });
+      if (error && typeof error === 'object' && 'message' in error) {
+        socket.emit('error', { message: error.message });
+      } else {
+        socket.emit('error', { message: 'An unknown error occurred' });
+      }
     }
   });
 }; 

@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import { CustomError } from '../utils/errors';
 
 const prisma = new PrismaClient();
 
@@ -23,8 +22,8 @@ export class ReactionService {
       });
       return reaction;
     } catch (error) {
-      if (error.code === 'P2002') {
-        throw new CustomError('Reaction already exists', 400);
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+        throw new Error('Reaction already exists');
       }
       throw error;
     }
