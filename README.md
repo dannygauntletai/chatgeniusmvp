@@ -10,6 +10,10 @@
 - Clerk
 - Prisma
 
+# Features implemented:
+
+Auth, real-time messaging, channel/dm organization (ironing out bugs), file sharing & file search, real-time user presense & status (through emoji selection), nested thread support, emoji reactions
+
 # Demo link
 
 https://chatgenius.fyi
