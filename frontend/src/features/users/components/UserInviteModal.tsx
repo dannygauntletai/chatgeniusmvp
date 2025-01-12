@@ -85,41 +85,65 @@ export const UserInviteModal = ({ isOpen, onClose }: UserInviteModalProps) => {
     <Modal isOpen={isOpen} onClose={onClose} title="Direct Messages">
       <div className="flex flex-col h-full">
         <div className="p-4">
-          <input
-            type="text"
-            placeholder="Search users..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full p-2 mb-4 border rounded focus:outline-none focus:border-primary text-black"
-          />
-          
-          {loading && (
-            <div className="flex justify-center py-4">
-              <LoadingSpinner />
+          <div className="relative mb-4">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </div>
-          )}
-          
-          {error && (
-            <div className="text-red-500 text-sm mb-4">{error}</div>
-          )}
-          
-          {!loading && !error && filteredUsers.length === 0 && (
-            <div className="text-gray-500 text-center py-4">
-              No users found
-            </div>
-          )}
-          
-          <div className="space-y-2">
-            {filteredUsers.map(user => (
-              <button
-                key={user.id}
-                onClick={() => handleUserClick(user)}
-                className="w-full text-left p-2 hover:bg-white/25 active:bg-white/25 rounded transition-colors text-black"
-              >
-                {user.username}
-              </button>
-            ))}
+            <input
+              type="text"
+              placeholder="Search for users..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+            />
           </div>
+          
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <LoadingSpinner className="h-8 w-8" />
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center py-4 px-3 bg-red-500/10 text-red-400 rounded-lg">
+              <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {error}
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-white">
+              <svg className="h-12 w-12 mb-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              <div>No users found</div>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {filteredUsers.map(user => (
+                <button
+                  key={user.id}
+                  onClick={() => handleUserClick(user)}
+                  className="w-full flex items-center p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white group"
+                >
+                  <div className="flex-1 flex items-center">
+                    <div className="h-8 w-8 rounded-full bg-gray-800 flex items-center justify-center text-sm font-medium mr-3 text-white">
+                      {user.username.charAt(0).toUpperCase()}
+                    </div>
+                    <span>{user.username}</span>
+                  </div>
+                  <svg 
+                    className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </Modal>
