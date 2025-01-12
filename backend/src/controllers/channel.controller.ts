@@ -4,7 +4,7 @@ import { prisma } from '../utils/prisma';
 import { io } from '../app';
 
 export class ChannelController {
-  static async createChannel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  static async createChannel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { name, isPrivate = false, members = [] } = req.body;
       const userId = req.auth.userId;
@@ -118,7 +118,7 @@ export class ChannelController {
     }
   }
 
-  static async joinChannel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<Response | void> {
+  static async joinChannel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { channelId } = req.params;
       const userId = req.auth.userId;
@@ -132,12 +132,14 @@ export class ChannelController {
       });
 
       if (!channel) {
-        return res.status(404).json({ message: 'Channel not found' });
+        res.status(404).json({ message: 'Channel not found' });
+        return;
       }
 
       const existingMember = channel.members.some((member: { id: string }) => member.id === userId);
       if (existingMember) {
-        return res.status(400).json({ message: 'Already a member of this channel' });
+        res.status(400).json({ message: 'Already a member of this channel' });
+        return;
       }
 
       const updatedChannel = await prisma.channel.update({
@@ -159,13 +161,13 @@ export class ChannelController {
       };
 
       io.emit('channel:updated', channelWithMemberCount);
-      return res.json(channelWithMemberCount);
+      res.json(channelWithMemberCount);
     } catch (error) {
-      return next(error);
+      next(error);
     }
   }
 
-  static async leaveChannel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<Response | void> {
+  static async leaveChannel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { channelId } = req.params;
       const userId = req.auth.userId;
@@ -179,16 +181,19 @@ export class ChannelController {
       });
 
       if (!channel) {
-        return res.status(404).json({ message: 'Channel not found' });
+        res.status(404).json({ message: 'Channel not found' });
+        return;
       }
 
       const existingMember = channel.members.some((member: { id: string }) => member.id === userId);
       if (!existingMember) {
-        return res.status(400).json({ message: 'Not a member of this channel' });
+        res.status(400).json({ message: 'Not a member of this channel' });
+        return;
       }
 
       if (channel.ownerId === userId) {
-        return res.status(400).json({ message: 'Channel owner cannot leave the channel' });
+        res.status(400).json({ message: 'Channel owner cannot leave the channel' });
+        return;
       }
 
       const updatedChannel = await prisma.channel.update({
@@ -210,20 +215,32 @@ export class ChannelController {
       };
 
       io.emit('channel:updated', channelWithMemberCount);
-      return res.json(channelWithMemberCount);
+      res.json(channelWithMemberCount);
     } catch (error) {
-      return next(error);
+      next(error);
     }
   }
 
-  static async getChannels(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void | Response> {
+  static async getChannels(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       console.log('Getting channels for user:', req.auth?.userId);
       
       const userId = req.auth?.userId;
       if (!userId) {
         console.error('No userId found in auth');
-        return res.status(401).json({ message: 'User not authenticated' });
+        res.status(401).json({ message: 'User not authenticated' });
+        return;
+      }
+
+      // Ensure user exists in database
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+
+      if (!user) {
+        console.error('User not found in database:', userId);
+        res.status(404).json({ message: 'User not found' });
+        return;
       }
 
       // First, get all public channels
@@ -259,19 +276,26 @@ export class ChannelController {
 
       // Only auto-join public channels if this is the user's first login (no existing memberships)
       if (existingMemberships.length === 0) {
-        await Promise.all(
-          publicChannels.map(async (channel: { id: string }) => {
-            await prisma.channel.update({
-              where: { id: channel.id },
-              data: {
-                members: {
-                  connect: { id: userId }
+        try {
+          await Promise.all(
+            publicChannels.map(async (channel: { id: string }) => {
+              const updatedChannel = await prisma.channel.update({
+                where: { id: channel.id },
+                data: {
+                  members: {
+                    connect: { id: userId }
+                  }
                 }
-              }
-            });
-            io.emit('channel:member_joined', { channelId: channel.id, user: { id: userId } });
-          })
-        );
+              });
+              console.log(`User ${userId} joined channel ${channel.id}`);
+              io.emit('channel:member_joined', { channelId: channel.id, user: { id: userId } });
+              return updatedChannel;
+            })
+          );
+        } catch (error) {
+          console.error('Error auto-joining channels:', error);
+          // Continue execution even if auto-join fails
+        }
       }
 
       // Now get all channels the user has access to (including the ones they were just added to)
@@ -307,13 +331,13 @@ export class ChannelController {
         }
       });
 
-      return res.json({
+      res.json({
         channels,
         directMessages: dms
       });
     } catch (error) {
       console.error('Error in getChannels:', error);
-      return next(error);
+      next(error);
     }
   }
 
