@@ -25,6 +25,7 @@ export const DMList = () => {
       try {
         setLoading(true);
         const data = await ChannelService.getChannels();
+        console.log('Loaded DMs:', data.directMessages);
         setDms(data.directMessages);
         setError(null);
       } catch (err) {
@@ -69,6 +70,7 @@ export const DMList = () => {
       <div className="p-4 text-gray-400">Fetching messages...</div>
     </div>
   );
+
   if (error) return (
     <div className="flex flex-col h-full">
       <div className="p-4 text-red-500">{error}</div>
@@ -79,7 +81,12 @@ export const DMList = () => {
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="space-y-1">
         {dms.map(dm => {
-          const username = dm.name.replace('dm-', '');
+          const otherMember = dm.members.find(member => member.id !== userId);
+          if (!otherMember) {
+            console.log('No other member found in channel:', dm.id);
+            return null;
+          }
+
           return (
             <div
               key={dm.id}
@@ -93,7 +100,7 @@ export const DMList = () => {
               <span className={`text-sm font-medium ${
                 activeChannel?.id === dm.id ? 'text-white' : 'text-white'
               }`}>
-                {username}
+                {otherMember.username}
               </span>
             </div>
           );

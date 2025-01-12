@@ -22,30 +22,34 @@ export const UserInviteModal = ({ isOpen, onClose }: UserInviteModalProps) => {
     const loadUsers = async () => {
       try {
         setLoading(true);
-        const [userData, channelData] = await Promise.all([
+        const [usersResponse, channelsResponse] = await Promise.all([
           UserService.getUsers(),
           ChannelService.getChannels()
         ]);
 
-        if (Array.isArray(userData)) {
-          // Get list of usernames that already have DM channels
-          const existingDMUsernames = channelData.directMessages.map(dm => 
-            dm.name.replace('dm-', '')
-          );
+        // Get existing DM user IDs
+        const existingDMUserIds = channelsResponse.directMessages
+          .flatMap(dm => dm.members)
+          .filter(member => member.id !== userId)
+          .map(member => member.id);
 
-          // Filter out current user and users who already have DM channels
-          const filteredUsers = userData.filter(user => 
-            user.id !== userId && !existingDMUsernames.includes(user.username)
-          );
-          
-          setUsers(filteredUsers);
-          setError(null);
-        } else {
-          setUsers([]);
-          setError('Invalid data received from server');
-        }
+        console.log('Filtering users:', {
+          currentUserId: userId,
+          existingDMUserIds,
+          totalUsers: usersResponse.length,
+          filteredUsers: usersResponse.filter(user => 
+            user.id !== userId && !existingDMUserIds.includes(user.id)
+          ).length
+        });
+
+        // Filter out current user and users who already have DM channels
+        const filteredUsers = usersResponse.filter(user => 
+          user.id !== userId && !existingDMUserIds.includes(user.id)
+        );
+
+        setUsers(filteredUsers);
+        setError(null);
       } catch (err) {
-        setUsers([]);
         setError('Failed to load users');
         console.error('Error loading users:', err);
       } finally {
@@ -60,11 +64,11 @@ export const UserInviteModal = ({ isOpen, onClose }: UserInviteModalProps) => {
 
   const handleUserClick = async (user: User) => {
     try {
-      // Create a private channel for DM with the target user's username
+      // Create a private channel for DM with both users
       await ChannelService.createChannel({
         name: `dm-${user.username}`,
         isPrivate: true,
-        members: [user.id]
+        members: [userId, user.id]
       });
       onClose();
     } catch (err) {
