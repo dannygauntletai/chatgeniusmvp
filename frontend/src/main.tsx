@@ -5,6 +5,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
 import './index.css';
 
+declare global {
+  const __CLERK_KEY__: string;
+  const __API_URL__: string;
+  const __WS_URL__: string;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -14,11 +20,17 @@ const queryClient = new QueryClient({
   },
 });
 
+console.log('Initializing Clerk...');
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ClerkProvider 
-      publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}
-      proxyUrl={import.meta.env.VITE_CLERK_PROXY_URL || "https://accounts.clerk.services"}
+      publishableKey={__CLERK_KEY__}
+      appearance={{
+        baseTheme: undefined,
+        variables: { colorPrimary: '#000000' },
+        layout: { socialButtonsPlacement: 'bottom' }
+      }}
     >
       <QueryClientProvider client={queryClient}>
         <App />
