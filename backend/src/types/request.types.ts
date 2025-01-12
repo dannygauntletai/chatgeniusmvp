@@ -1,7 +1,11 @@
-import { Request } from 'express';
+import { Request } from 'express-serve-static-core';
+import { User } from '@clerk/clerk-sdk-node';
 
-export interface AuthRequest extends Request {
-  user: {
-    id: string;
-  }
+export interface AuthenticatedRequest extends Request {
+  auth: {
+    userId: string;
+    user: User;
+  };
+  body: any;
+  params: any;
 } 
