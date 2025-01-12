@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import { initializeSocket } from './socket/connection';
 import { errorHandler } from './middleware/error.middleware';
 import { requireAuth } from './middleware/auth.middleware';
+import { socketAuth } from './middleware/socket.middleware';
 import messageRoutes from './routes/message.routes';
 import channelRoutes from './routes/channel.routes';
 import threadRoutes from './routes/thread.routes';
@@ -19,6 +20,9 @@ const io = new Server(httpServer, {
     methods: ['GET', 'POST']
   }
 });
+
+// Add socket authentication middleware
+io.use(socketAuth);
 
 // Initialize socket connection
 initializeSocket(io);

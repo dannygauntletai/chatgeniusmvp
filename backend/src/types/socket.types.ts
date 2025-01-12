@@ -9,6 +9,7 @@ export interface ServerToClientEvents {
   'channel:member_left': (data: { channelId: string; userId: string }) => void;
   'thread:message_created': (message: Message) => void;
   'thread:message_updated': (message: Message) => void;
+  'user:status_changed': (data: { userId: string; status: string }) => void;
   'error': (error: string) => void;
 }
 
@@ -25,6 +26,7 @@ export interface ClientToServerEvents {
   };
   'channel:join': (channelId: string) => void;
   'channel:leave': (channelId: string) => void;
+  'status:update': (status: string) => void;
 }
 
 export interface SocketData {

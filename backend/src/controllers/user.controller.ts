@@ -13,6 +13,7 @@ export class UserController {
           id: true,
           username: true,
           email: true,
+          status: true,
           createdAt: true,
           updatedAt: true
         }
@@ -33,6 +34,7 @@ export class UserController {
           id: true,
           username: true,
           email: true,
+          status: true,
           createdAt: true,
           updatedAt: true
         }

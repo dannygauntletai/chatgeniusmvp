@@ -2,7 +2,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 let authToken: string | null = null;
 
-export const setAuthToken = (token: string | null) => {
+const setAuthToken = (token: string | null) => {
   authToken = token;
 };
 
@@ -39,4 +39,7 @@ export const api = {
     body: JSON.stringify(body) 
   }),
   delete: (endpoint: string) => fetchWithAuth(endpoint, { method: 'DELETE' }),
-}; 
+  setAuthToken
+};
+
+export { setAuthToken }; 

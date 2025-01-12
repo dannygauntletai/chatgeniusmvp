@@ -5,6 +5,7 @@ import { DMList } from '../features/direct-messages/components/DMList';
 import { UserInviteModal } from '../features/users/components/UserInviteModal';
 import { CreateChannelModal } from '../features/channels/components/CreateChannelModal';
 import { api } from '../services/api.service';
+import { socket, disconnectSocket } from '../services/socket.service';
 
 export const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const { signOut } = useAuth();
@@ -12,10 +13,22 @@ export const MainLayout = ({ children }: { children: React.ReactNode }) => {
   const [isCreateChannelModalOpen, setIsCreateChannelModalOpen] = useState(false);
 
   const handleSignOut = async () => {
-    // Clear API token
-    localStorage.removeItem('authToken');
-    api.setAuthToken(null);
-    await signOut();
+    try {
+      // Set user as offline before signing out
+      await socket.emit('status:update', 'offline');
+      
+      // Disconnect socket
+      disconnectSocket();
+      
+      // Clear API token
+      localStorage.removeItem('authToken');
+      api.setAuthToken(null);
+      
+      // Sign out from Clerk
+      await signOut();
+    } catch (error) {
+      console.error('Error during sign out:', error);
+    }
   };
 
   return (

@@ -9,6 +9,7 @@ import { MessageList } from './features/messages/components/MessageList';
 import { MessageInput } from './features/messages/components/MessageInput';
 import { useEffect, useState } from 'react';
 import { setAuthToken } from './services/api.service';
+import { socket, connectSocket, disconnectSocket } from './services/socket.service';
 
 console.log('App component rendering');
 
@@ -30,19 +31,25 @@ const DashboardLayout = () => {
       if (!isMounted || !session) return;
 
       try {
-        const token = await session.getToken();
-        if (!token) {
+        const sessionToken = await session.getToken();
+        if (!sessionToken) {
           console.error('Failed to get session token');
           if (isMounted) {
             setIsTokenSet(false);
             setAuthToken(null);
+            disconnectSocket();
           }
           return;
         }
 
         if (isMounted) {
-          setAuthToken(token);
+          setAuthToken(sessionToken);
           setIsTokenSet(true);
+
+          // Connect socket with auth credentials
+          connectSocket(session.id, sessionToken);
+          // Set user as online
+          socket.emit('status:update', 'online');
 
           // Schedule next refresh for 5 minutes before token expiry
           const expiryTime = session.expireAt;
@@ -59,6 +66,7 @@ const DashboardLayout = () => {
         if (isMounted) {
           setIsTokenSet(false);
           setAuthToken(null);
+          disconnectSocket();
         }
       }
     };
@@ -70,6 +78,9 @@ const DashboardLayout = () => {
       if (refreshTimeout) {
         clearTimeout(refreshTimeout);
       }
+      // Set user as offline and disconnect socket when component unmounts
+      socket.emit('status:update', 'offline');
+      disconnectSocket();
     };
   }, [session]);
 
