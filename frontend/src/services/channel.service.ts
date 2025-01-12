@@ -36,4 +36,8 @@ export class ChannelService {
       }
     }
   }
+
+  static async removeMember(channelId: string, userId: string): Promise<void> {
+    await api.post(`/api/channels/${channelId}/remove-member`, { userId });
+  }
 } 

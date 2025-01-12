@@ -29,9 +29,24 @@ export function UserInviteModal({ isOpen, onClose, channelId }: UserInviteModalP
       setLoading(true);
       setError(null);
       const allUsers = await UserService.getUsers();
-      // Filter out current user and users who already have DM channels
-      const filteredUsers = allUsers.filter((u: User) => u.id !== userId);
-      setUsers(filteredUsers);
+      
+      // Get the current channel to check its members
+      if (channelId) {
+        const channels = await ChannelService.getChannels();
+        const currentChannel = channels.channels.find(c => c.id === channelId);
+        if (currentChannel) {
+          // Filter out current user and users who are already in the channel
+          const filteredUsers = allUsers.filter(u => 
+            u.id !== userId && 
+            !currentChannel.members.some(m => m.id === u.id)
+          );
+          setUsers(filteredUsers);
+        }
+      } else {
+        // For DMs, just filter out the current user
+        const filteredUsers = allUsers.filter(u => u.id !== userId);
+        setUsers(filteredUsers);
+      }
     } catch (error) {
       setError('Failed to load users');
       console.error('Error loading users:', error);

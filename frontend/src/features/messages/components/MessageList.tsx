@@ -12,13 +12,16 @@ import { useThread } from '../../threads/context';
 import { UserService } from '../../../services/user.service';
 import { useUserContext } from '../../../contexts/UserContext';
 import { UserInviteModal } from '../../users/components/UserInviteModal';
+import { ChannelMembersModal } from '../../channels/components/ChannelMembersModal';
 
 const ChannelHeader = ({ name, isPrivate, channelId }: { name: string; isPrivate: boolean; channelId: string }) => {
   const [userStatus, setUserStatus] = useState<string | null>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const { username: currentUsername } = useUserContext();
   const [otherUsername, setOtherUsername] = useState<string>('');
   const [otherUserId, setOtherUserId] = useState<string>('');
+  const { activeChannel } = useChannel();
 
   useEffect(() => {
     const fetchUserStatus = async () => {
@@ -77,23 +80,44 @@ const ChannelHeader = ({ name, isPrivate, channelId }: { name: string; isPrivate
             </>
           )}
         </div>
-        {isPrivate && !name.startsWith('dm-') && (
-          <button
-            onClick={() => setIsInviteModalOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Invite
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isPrivate && !name.startsWith('dm-') && (
+            <button
+              onClick={() => setIsInviteModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Invite
+            </button>
+          )}
+          {!name.startsWith('dm-') && (
+            <button
+              onClick={() => setIsMembersModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 12a4 4 0 100-8 4 4 0 000 8z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+              </svg>
+              Members
+            </button>
+          )}
+        </div>
       </div>
       <UserInviteModal
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
         channelId={channelId}
       />
+      {activeChannel && (
+        <ChannelMembersModal
+          isOpen={isMembersModalOpen}
+          onClose={() => setIsMembersModalOpen(false)}
+          channel={activeChannel}
+        />
+      )}
     </>
   );
 };
@@ -124,6 +148,9 @@ const MessageListContent = () => {
       return;
     }
 
+    // Join the channel's socket room
+    socket.emit('channel:join', activeChannel.id);
+
     setLoading(true);
     MessageService.getChannelMessages(activeChannel.id)
       .then(data => {
@@ -142,8 +169,10 @@ const MessageListContent = () => {
     };
 
     socket.on('message:created', handleNewMessage);
+
     return () => {
       socket.off('message:created', handleNewMessage);
+      socket.emit('channel:leave', activeChannel.id);
     };
   }, [activeChannel?.id]);
 

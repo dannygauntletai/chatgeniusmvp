@@ -351,4 +351,61 @@ export class ChannelController {
       return next(error);
     }
   }
+
+  static async removeMember(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<Response | void> {
+    try {
+      const { channelId } = req.params;
+      const { userId: memberIdToRemove } = req.body;
+      const requestingUserId = req.auth.userId;
+
+      const channel = await prisma.channel.findUnique({
+        where: { id: channelId },
+        include: {
+          members: true,
+          owner: true
+        }
+      });
+
+      if (!channel) {
+        return res.status(404).json({ message: 'Channel not found' });
+      }
+
+      // Check if requesting user is the channel owner
+      if (channel.ownerId !== requestingUserId) {
+        return res.status(403).json({ message: 'Only channel owner can remove members' });
+      }
+
+      // Check if user to remove exists in channel
+      const existingMember = channel.members.some((member: { id: string }) => member.id === memberIdToRemove);
+      if (!existingMember) {
+        return res.status(400).json({ message: 'User is not a member of this channel' });
+      }
+
+      // Cannot remove the owner
+      if (memberIdToRemove === channel.ownerId) {
+        return res.status(400).json({ message: 'Cannot remove channel owner' });
+      }
+
+      const updatedChannel = await prisma.channel.update({
+        where: { id: channelId },
+        data: {
+          members: {
+            disconnect: { id: memberIdToRemove }
+          }
+        },
+        include: {
+          members: true,
+          owner: true,
+          _count: {
+            select: { members: true }
+          }
+        }
+      });
+
+      io.emit('channel:member_left', { channelId, userId: memberIdToRemove });
+      return res.json(updatedChannel);
+    } catch (error) {
+      return next(error);
+    }
+  }
 } 

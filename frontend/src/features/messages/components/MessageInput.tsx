@@ -55,7 +55,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder={placeholder}
-            className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:border-primary text-black"
+            className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:border-primary bg-gray-900 text-white"
             disabled={isSending}
           />
           <button
