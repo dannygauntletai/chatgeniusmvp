@@ -43,14 +43,21 @@ const DashboardLayout = () => {
           return;
         }
 
+        // Set the token first
+        setAuthToken(sessionToken);
+        
+        // Wait a tick to ensure token is propagated
+        await new Promise(resolve => setTimeout(resolve, 0));
+        
         if (isMounted) {
-          setAuthToken(sessionToken);
-          setIsTokenSet(true);
-
           // Connect socket with auth credentials
-          connectSocket(session.id, sessionToken);
+          await connectSocket(session.id, sessionToken);
+          
           // Set user as online only during initial connection
           socket.emit('status:update', 'online');
+          
+          // Only set isTokenSet to true after everything is ready
+          setIsTokenSet(true);
 
           // Schedule next refresh for 5 minutes before token expiry
           const expiryTime = session.expireAt;
@@ -87,7 +94,8 @@ const DashboardLayout = () => {
   if (!session || !isTokenSet) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Setting up authentication...</div>
+        <LoadingSpinner className="h-8 w-8" />
+        <div className="text-gray-400 ml-3">Setting up authentication...</div>
       </div>
     );
   }
