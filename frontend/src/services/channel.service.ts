@@ -50,7 +50,22 @@ export class ChannelService {
   }
 
   static async createChannel(data: ChannelCreateInput): Promise<Channel> {
-    return api.post('/api/channels', data);
+    const channel = await api.post('/api/channels', data);
+    
+    // Update cache with new channel if we have cached data
+    if (channelCache.data) {
+      channelCache = {
+        data: {
+          ...channelCache.data,
+          channels: [channel, ...channelCache.data.channels]
+        },
+        timestamp: Date.now()
+      };
+    } else {
+      this.clearCache(); // If no cache, clear it to force a fresh fetch
+    }
+    
+    return channel;
   }
 
   static async joinChannel(channelId: string): Promise<void> {

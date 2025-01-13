@@ -41,7 +41,25 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
     // Listen for real-time updates
     socket.on('channel:created', (channel: Channel) => {
       if (!channel.name.startsWith('dm-')) {
-        setChannels(prev => [channel, ...prev]);
+        setChannels(prev => {
+          // Avoid duplicates
+          const exists = prev.some(c => c.id === channel.id);
+          if (exists) {
+            return prev;
+          }
+          return [channel, ...prev];
+        });
+      }
+    });
+
+    // Listen for channel updates
+    socket.on('channel:updated', (updatedChannel: Channel) => {
+      if (!updatedChannel.name.startsWith('dm-')) {
+        setChannels(prev => 
+          prev.map(channel => 
+            channel.id === updatedChannel.id ? updatedChannel : channel
+          )
+        );
       }
     });
 
@@ -109,6 +127,7 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
 
     return () => {
       socket.off('channel:created');
+      socket.off('channel:updated');
       socket.off('channel:member_left');
       socket.off('channel:member_joined');
       socket.off('channel:deleted');
@@ -121,22 +140,16 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
         return;
       }
 
-      // Update UI first to prevent flickering
-      setActiveChannel(channel);
-
-      // Handle socket events
+      // Handle socket events first
       if (activeChannel) {
         socket.emit('channel:leave', activeChannel.id);
       }
-      socket.emit('channel:join', channel.id);
 
-      // Ensure channel stays in list
-      setChannels(prev => {
-        if (!prev.some(c => c.id === channel.id)) {
-          return [channel, ...prev.filter(c => c.id !== channel.id)];
-        }
-        return prev;
-      });
+      // Join new channel
+      await ChannelService.joinChannel(channel.id);
+      
+      // Update UI state
+      setActiveChannel(channel);
 
     } catch (error) {
       console.error('Failed to switch channel:', error);
