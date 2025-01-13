@@ -28,7 +28,8 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
     const loadChannels = async () => {
       try {
         const data = await ChannelService.getChannels();
-        setChannels(data.channels);
+        const regularChannels = data.channels.filter(channel => !channel.name.startsWith('dm-'));
+        setChannels(regularChannels);
       } catch (err) {
         setError('Failed to load channels');
       } finally {
