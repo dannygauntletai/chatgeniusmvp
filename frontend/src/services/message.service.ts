@@ -4,7 +4,10 @@ import { api } from '../services/api.service';
 
 export class MessageService {
   static async createMessage(data: { content: string; channelId?: string; threadId?: string }): Promise<Message> {
+    console.log('\n=== FRONTEND: Creating Message ===');
+    console.log('Request data:', JSON.stringify(data, null, 2));
     const response = await api.post('/api/messages', data);
+    console.log('Response from backend:', JSON.stringify(response, null, 2));
     return response;
   }
 

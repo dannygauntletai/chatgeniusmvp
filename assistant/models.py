@@ -1,19 +1,20 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional, Literal
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
 
 class Message(BaseModel):
     message_id: str
     channel_name: str
     sender_name: str
     content: str
-    created_at: str
-    similarity: float
+    created_at: Optional[str] = None
+    similarity: Optional[float] = None
 
 class AssistantRequest(BaseModel):
     message: str
     channel_id: str
     user_id: str
-    channel_type: Literal["public", "private", "dm", "assistant"]
+    channel_type: str
     thread_id: Optional[str] = None
 
 class AssistantResponse(BaseModel):
@@ -21,19 +22,26 @@ class AssistantResponse(BaseModel):
     context_used: List[str]
     confidence: float
 
+class InitializeResponse(BaseModel):
+    message: str
+    total_messages: int
+    vectors_created: int
+    index_name: str
+
 class RetrieveRequest(BaseModel):
     query: str
     user_id: str
     channel_id: str
-    channel_type: Literal["public", "private", "dm", "assistant"]
-    top_k: int = Field(default=5, ge=1, le=20)
-    threshold: float = Field(default=0.7, ge=0, le=1)
+    channel_type: str
+    top_k: int = 5
+    threshold: float = 0.3
 
 class RetrieveResponse(BaseModel):
     query: str
     messages: List[Message]
 
-class InitializeResponse(BaseModel):
-    total_messages: int
-    vectors_created: int
-    index_name: str 
+class IndexStats(BaseModel):
+    dimension: int
+    index_fullness: float
+    total_vector_count: int
+    namespaces: dict 

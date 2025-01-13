@@ -1,112 +1,137 @@
-import { PrismaClient } from '@prisma/client';
-import { MessageCreateInput, MessageUpdateInput } from '../types/message.types';
-import { CustomError } from '../utils/errors';
+import { Message } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 
-const prisma = new PrismaClient();
+const VECTOR_API_URL = process.env.VECTOR_API_URL || 'http://localhost:8001';
+
+interface CreateMessageData {
+  content: string;
+  userId: string;
+  channelId: string;
+  threadId?: string;
+}
+
+interface UpdateMessageData {
+  content: string;
+}
 
 export class MessageService {
-  static async createMessage(data: MessageCreateInput) {
-    try {
-      const { channelId, userId } = data;
-      
-      // Verify channel exists and user is a member
-      const channel = await prisma.channel.findFirst({
-        where: {
-          id: channelId,
-          members: {
-            some: {
-              id: userId
-            }
-          }
-        }
-      });
-
-      if (!channel) {
-        throw new CustomError('Channel not found or user not a member', 404);
-      }
-
-      return await prisma.message.create({
-        data: {
-          content: data.content,
-          channelId: data.channelId,
-          userId: data.userId,
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-            },
+  async create(data: CreateMessageData): Promise<Message> {
+    console.log('\n=== MESSAGE CREATION STARTED ===');
+    console.log('Creating message with data:', JSON.stringify(data, null, 2));
+    
+    const message = await prisma.message.create({
+      data: {
+        content: data.content,
+        userId: data.userId,
+        channelId: data.channelId,
+        threadId: data.threadId
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
           },
         },
+      },
+    });
+    console.log('Message created in database:', JSON.stringify(message, null, 2));
+
+    // Update vector index
+    try {
+      const url = `${VECTOR_API_URL}/update`;
+      const body = JSON.stringify({ message_id: message.id });
+      console.log('\n=== VECTOR SERVICE UPDATE REQUEST ===');
+      console.log('VECTOR_API_URL env var:', process.env.VECTOR_API_URL);
+      console.log('Final URL:', url);
+      console.log('Request Body:', body);
+      console.log('Starting fetch request...');
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: body,
       });
-    } catch (error) {
-      if (error instanceof CustomError) throw error;
-      throw new CustomError('Failed to create message', 500);
+      console.log('Fetch request completed');
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Vector service error:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+        return message;
+      }
+
+      const result = await response.json();
+      console.log('Vector service response:', result);
+    } catch (error: any) {
+      console.error('Failed to update vector index:', {
+        error: error.message,
+        stack: error.stack,
+        messageId: message.id,
+        vectorUrl: `${VECTOR_API_URL}/update`
+      });
+      // Don't throw error to avoid breaking message creation
     }
+
+    return message;
   }
 
-  static async getChannelMessages(channelId: string) {
-    try {
-      const messages = await prisma.message.findMany({
-        where: {
-          channelId,
-          threadId: null, // Only get main messages, not replies
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-            },
+  async update(id: string, data: UpdateMessageData): Promise<Message> {
+    const message = await prisma.message.update({
+      where: { id },
+      data: {
+        content: data.content,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
           },
-          _count: {
-            select: {
-              replies: true
-            }
-          }
         },
-        orderBy: {
-          createdAt: 'desc',
+      },
+    });
+
+    // Update vector index
+    try {
+      await fetch(`${VECTOR_API_URL}/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ message_id: message.id }),
       });
-      
-      return messages;
     } catch (error) {
-      if (error instanceof CustomError) throw error;
-      throw new CustomError('Failed to fetch messages', 500);
+      console.error('Failed to update vector index:', error);
     }
+
+    return message;
   }
 
-  static async updateMessage(messageId: string, userId: string, data: MessageUpdateInput) {
+  async delete(id: string): Promise<Message> {
+    const message = await prisma.message.delete({
+      where: { id },
+    });
+
+    // Delete from vector index
     try {
-      const message = await prisma.message.findUnique({
-        where: { id: messageId }
-      });
-
-      if (!message) {
-        throw new CustomError('Message not found', 404);
-      }
-
-      if (message.userId !== userId) {
-        throw new CustomError('Not authorized to update this message', 403);
-      }
-
-      return await prisma.message.update({
-        where: { id: messageId },
-        data: { content: data.content },
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-            },
-          },
+      await fetch(`${VECTOR_API_URL}/delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ message_id: id }),
       });
     } catch (error) {
-      if (error instanceof CustomError) throw error;
-      throw new CustomError('Failed to update message', 500);
+      console.error('Failed to delete from vector index:', error);
     }
+
+    return message;
   }
 } 

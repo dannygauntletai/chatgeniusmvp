@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { prisma } from '../lib/prisma';
 import { io } from '../app';
+import { MessageService } from '../services/message.service';
 
 export class MessageController {
   static async createMessage(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -13,21 +14,12 @@ export class MessageController {
         return res.status(400).json({ message: 'Content and channelId are required' });
       }
 
-      const message = await prisma.message.create({
-        data: {
-          content,
-          channelId,
-          userId,
-          threadId,
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-            },
-          },
-        },
+      const messageService = new MessageService();
+      const message = await messageService.create({
+        content,
+        channelId,
+        userId,
+        threadId,
       });
 
       io.to(channelId).emit('message:created', message);

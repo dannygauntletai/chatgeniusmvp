@@ -13,6 +13,7 @@ model User {
   email     String?  @unique
   username  String   @unique
   password  String?
+  avatarUrl String?
   status    String   @default("offline")
   user_status String? @default("😊")
   createdAt DateTime @default(now())

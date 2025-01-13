@@ -207,7 +207,22 @@ const MessageListContent = () => {
           }
           
           const newMessages = [...prev];
-          newMessages[tempMessageIndex] = message;
+          const tempMessage = newMessages[tempMessageIndex];
+          
+          // Preserve assistant user information
+          if (tempMessage.userId === 'assistant') {
+            newMessages[tempMessageIndex] = {
+              ...message,
+              userId: 'assistant',
+              user: {
+                id: 'assistant',
+                username: 'Assistant'
+              }
+            };
+          } else {
+            newMessages[tempMessageIndex] = message;
+          }
+          
           return newMessages;
         });
         

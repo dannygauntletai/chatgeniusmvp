@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { MessageService } from '../../../services/message.service';
+import { AssistantService } from '../../../services/assistant.service';
 import { useChannel } from '../../channels/context/ChannelContext';
 import { useUserContext } from '../../../contexts/UserContext';
 import { socket } from '../../../services/socket.service';
@@ -25,6 +26,60 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const { activeChannel } = useChannel();
   const { userId, username } = useUserContext();
 
+  const handleAssistantMention = async (type: string, query: string) => {
+    if (type === 'assistant' && activeChannel) {
+      try {
+        const response = await AssistantService.getResponse(
+          query,
+          activeChannel.id,
+          userId,
+          activeChannel.isPrivate ? 'private' : 'public',
+          threadParentId
+        );
+        
+        // Create optimistic message for assistant's response
+        const optimisticMessage: Message = {
+          id: `temp-${Date.now()}`,
+          content: response.response,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          userId: 'assistant', // Special ID for assistant
+          channelId: activeChannel.id,
+          threadId: threadParentId,
+          user: {
+            id: 'assistant',
+            username: 'Assistant'
+          },
+          reactions: {}
+        };
+
+        // Update UI immediately
+        onOptimisticUpdate?.(optimisticMessage);
+        
+        try {
+          // Send the actual message
+          if (threadParentId) {
+            await MessageService.createMessage({
+              content: response.response,
+              threadId: threadParentId,
+            });
+          } else {
+            await MessageService.createMessage({
+              content: response.response,
+              channelId: activeChannel.id,
+            });
+          }
+        } catch (error) {
+          console.error('Failed to send assistant message:', error);
+          // Revert optimistic update if message send fails
+          onOptimisticRevert?.(optimisticMessage.id);
+        }
+      } catch (error) {
+        console.error('Failed to get assistant response:', error);
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim() || isSending) return;
@@ -33,8 +88,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     setIsSending(true);
     setContent('');
 
-    // Create optimistic message
-    const optimisticMessage: Message = {
+    // Create optimistic message for user's message
+    const userMessage: Message = {
       id: `temp-${Date.now()}`,
       content: trimmedContent,
       createdAt: new Date().toISOString(),
@@ -49,10 +104,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       reactions: {}
     };
 
-    // Update UI immediately
-    onOptimisticUpdate?.(optimisticMessage);
+    // Update UI with user's message
+    onOptimisticUpdate?.(userMessage);
 
     try {
+      // Send user's message
       if (onSend) {
         await onSend(trimmedContent);
       } else if (threadParentId) {
@@ -66,10 +122,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           channelId: activeChannel.id,
         });
       }
+
+      // If this is an @assistant mention, get and send the assistant's response
+      if (trimmedContent.includes('@assistant')) {
+        const query = trimmedContent.replace('@assistant', '').trim();
+        await handleAssistantMention('assistant', query);
+      }
     } catch (error) {
       console.error('Failed to send message:', error);
       // Revert optimistic update
-      onOptimisticRevert?.(optimisticMessage.id);
+      onOptimisticRevert?.(userMessage.id);
       setContent(trimmedContent);
     } finally {
       setIsSending(false);

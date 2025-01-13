@@ -1,8 +1,27 @@
 import { PrismaClient } from '@prisma/client';
+import { hash } from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
+  // Create assistant bot user if it doesn't exist
+  const assistantBotId = process.env.ASSISTANT_BOT_USER_ID!;
+  const existingBot = await prisma.user.findUnique({
+    where: { id: assistantBotId }
+  });
+
+  if (!existingBot) {
+    await prisma.user.create({
+      data: {
+        id: assistantBotId,
+        username: 'Assistant',
+        email: 'assistant@chatgenius.ai',
+        password: await hash('', 10), // Empty password hash
+        avatarUrl: '/assistant-avatar.png'
+      }
+    });
+  }
+
   // Create test user
   const user = await prisma.user.upsert({
     where: { email: 'test@example.com' },
@@ -33,5 +52,10 @@ async function main() {
 }
 
 main()
-  .catch((e) => console.error(e))
-  .finally(async () => await prisma.$disconnect()); 
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  }); 
