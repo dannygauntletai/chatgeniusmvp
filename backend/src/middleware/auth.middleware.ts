@@ -3,6 +3,46 @@ import { ClerkExpressRequireAuth, clerkClient } from '@clerk/clerk-sdk-node';
 import { AuthenticatedRequest } from '../types/request.types';
 import { prisma } from '../utils/prisma';
 
+// Simple in-memory cache for Clerk user data
+interface CacheEntry {
+  data: any;
+  expiresAt: number;
+}
+
+const userCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+// Clean up expired cache entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of userCache.entries()) {
+    if (value.expiresAt <= now) {
+      userCache.delete(key);
+    }
+  }
+}, CACHE_TTL);
+
+const getOrFetchClerkUser = async (userId: string) => {
+  const now = Date.now();
+  const cached = userCache.get(userId);
+
+  // Return cached data if it exists and hasn't expired
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
+  // Fetch fresh data from Clerk
+  const clerkUser = await clerkClient.users.getUser(userId);
+  
+  // Cache the result
+  userCache.set(userId, {
+    data: clerkUser,
+    expiresAt: now + CACHE_TTL
+  });
+
+  return clerkUser;
+};
+
 export { AuthenticatedRequest };
 
 export const requireAuth = async (
@@ -21,7 +61,7 @@ export const requireAuth = async (
             return;
           }
 
-          const clerkUser = await clerkClient.users.getUser(authReq.auth.userId);
+          const clerkUser = await getOrFetchClerkUser(authReq.auth.userId);
           authReq.auth.user = clerkUser;
 
           // Sync user with our database
@@ -49,9 +89,13 @@ export const requireAuth = async (
           
           next();
           resolve();
-        } catch (error) {
+        } catch (error: any) {
           console.error('Inner auth error:', error);
-          res.status(401).json({ error: 'Invalid token' });
+          if (error.status === 429) {
+            res.status(429).json({ error: 'Too many requests. Please try again later.' });
+          } else {
+            res.status(401).json({ error: 'Invalid token' });
+          }
           resolve();
         }
       });
