@@ -1,6 +1,5 @@
 import { Socket } from 'socket.io';
 import { ThreadService } from '../services/thread.service';
-import { io } from '../app';
 
 interface ThreadMessageData {
   content: string;
