@@ -9,8 +9,15 @@ interface CacheEntry {
   expiresAt: number;
 }
 
+interface DBCacheEntry {
+  userId: string;
+  lastSyncAt: number;
+}
+
 const userCache = new Map<string, CacheEntry>();
+const dbSyncCache = new Map<string, DBCacheEntry>();
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes in milliseconds
+const DB_SYNC_TTL = 30 * 60 * 1000; // 30 minutes in milliseconds
 
 // Clean up expired cache entries periodically
 setInterval(() => {
@@ -20,7 +27,25 @@ setInterval(() => {
       userCache.delete(key);
     }
   }
+  
+  for (const [key, value] of dbSyncCache.entries()) {
+    if ((now - value.lastSyncAt) > DB_SYNC_TTL) {
+      dbSyncCache.delete(key);
+    }
+  }
 }, CACHE_TTL);
+
+const shouldSyncWithDB = (userId: string): boolean => {
+  const now = Date.now();
+  const lastSync = dbSyncCache.get(userId);
+  
+  if (!lastSync || (now - lastSync.lastSyncAt) > DB_SYNC_TTL) {
+    dbSyncCache.set(userId, { userId, lastSyncAt: now });
+    return true;
+  }
+  
+  return false;
+};
 
 const getOrFetchClerkUser = async (userId: string) => {
   const now = Date.now();
@@ -64,27 +89,28 @@ export const requireAuth = async (
           const clerkUser = await getOrFetchClerkUser(authReq.auth.userId);
           authReq.auth.user = clerkUser;
 
-          // Sync user with our database
-          try {
-            const user = await prisma.user.upsert({
-              where: { id: clerkUser.id },
-              update: {
-                username: clerkUser.username || `user_${clerkUser.id.substring(0, 8)}`,
-                email: clerkUser.emailAddresses[0]?.emailAddress,
-                status: 'online'
-              },
-              create: {
-                id: clerkUser.id,
-                username: clerkUser.username || `user_${clerkUser.id.substring(0, 8)}`,
-                email: clerkUser.emailAddresses[0]?.emailAddress,
-                status: 'online'
-              }
-            });
-
-            console.log('User synced with database:', user.id);
-          } catch (dbError) {
-            console.error('Error syncing user with database:', dbError);
-            // Continue even if sync fails - don't block the request
+          // Only sync with database if needed
+          if (shouldSyncWithDB(clerkUser.id)) {
+            try {
+              const user = await prisma.user.upsert({
+                where: { id: clerkUser.id },
+                update: {
+                  username: clerkUser.username || `user_${clerkUser.id.substring(0, 8)}`,
+                  email: clerkUser.emailAddresses[0]?.emailAddress,
+                  status: 'online'
+                },
+                create: {
+                  id: clerkUser.id,
+                  username: clerkUser.username || `user_${clerkUser.id.substring(0, 8)}`,
+                  email: clerkUser.emailAddresses[0]?.emailAddress,
+                  status: 'online'
+                }
+              });
+              console.log('User synced with database:', user.id);
+            } catch (dbError) {
+              console.error('Error syncing user with database:', dbError);
+              // Continue even if sync fails - don't block the request
+            }
           }
           
           next();
