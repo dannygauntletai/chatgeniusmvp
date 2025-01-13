@@ -7,9 +7,23 @@ from dotenv import load_dotenv
 import os
 from models import AssistantRequest, AssistantResponse
 from vector_client import VectorServiceClient
+from langsmith import Client
+from langchain_core.tracers.context import tracing_v2_enabled
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_openai import ChatOpenAI
 
 # Load environment variables
 load_dotenv()
+
+# Initialize LangSmith
+langsmith_client = Client()
+
+# Initialize chat model
+chat = ChatOpenAI(
+    model="gpt-4-turbo-preview",
+    temperature=0.7,
+    openai_api_key=os.getenv("OPENAI_API_KEY")
+)
 
 # Initialize FastAPI app
 app = FastAPI(title="ChatGenius Assistant Service")
@@ -17,10 +31,10 @@ app = FastAPI(title="ChatGenius Assistant Service")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
 # Initialize OpenAI client
@@ -146,23 +160,11 @@ async def format_vector_messages_for_context(messages: List[Dict]) -> str:
 
 @app.post("/assist", response_model=AssistantResponse)
 async def get_assistant_response(request: AssistantRequest):
-    """
-    Get a context-aware response from the assistant.
-    Context rules:
-    - Public channel: Use all public message contexts
-    - Private channel: Use all public message context + that private message context
-    - DM channel: Use all public message context + that private dm channel context
-    - Assistant channel: Use all messages both public and private context the user has access to
-    """
-    try:
-        # Ensure database connection
-        if not prisma.is_connected():
-            print("Reconnecting to database...")
-            await prisma.connect()
-
-        # Get channel information
+    """Get a response from the assistant with context."""
+    
+    with tracing_v2_enabled() as tracer:
         try:
-            print(f"Fetching channel {request.channel_id}...")
+            # Get channel and user context
             channel = await prisma.channel.find_unique(
                 where={"id": request.channel_id},
                 include={
@@ -175,130 +177,101 @@ async def get_assistant_response(request: AssistantRequest):
                     }
                 }
             )
-            print(f"Channel found: {channel is not None}")
-            if channel:
-                print(f"Channel type: {'private' if channel.isPrivate else 'public'}")
-        except Exception as e:
-            print(f"Error fetching channel: {str(e)}")
-            channel = None
-        
-        # Get user information
-        try:
-            print(f"Fetching user {request.user_id}...")
+            
             user = await prisma.user.find_unique(
                 where={"id": request.user_id}
             )
-            print(f"User found: {user is not None}")
-        except Exception as e:
-            print(f"Error fetching user: {str(e)}")
-            user = None
-
-        # Get relevant messages using vector search
-        try:
-            print("Retrieving similar messages...")
-            similar_messages = await vector_client.retrieve_similar(
+            
+            if not channel or not user:
+                raise HTTPException(status_code=404, detail="Channel or user not found")
+            
+            # Build context string
+            context = ""
+            
+            # Add channel context
+            if channel:
+                context += f"\nChannel: {channel.name}"
+                context += f"\nType: {'Private' if channel.isPrivate else 'Public'}"
+                if channel.isPrivate and channel.members:
+                    members = [member.username for member in channel.members]
+                    context += f"\nMembers: {', '.join(members)}"
+                if channel.owner:
+                    context += f"\nOwner: {channel.owner.username}"
+                
+            # Add user context
+            if user:
+                context += f"\nCurrent user: {user.username}"
+            
+            # Get recent channel messages for context
+            recent_messages = await prisma.message.find_many(
+                where={
+                    "channelId": channel.id,
+                    "NOT": {
+                        "content": {
+                            "contains": "@assistant"
+                        }
+                    }
+                },
+                include={
+                    "user": True,
+                    "thread": True
+                },
+                order={
+                    "createdAt": "desc"
+                },
+                take=5
+            )
+            
+            if recent_messages:
+                context += "\n\nRecent conversation:"
+                for msg in reversed(recent_messages):
+                    thread_info = ""
+                    if msg.thread:
+                        thread_info = f" (replying to thread)"
+                    if msg.user:
+                        context += f"\n{msg.user.username}: {msg.content}{thread_info}"
+            
+            # Get similar messages
+            similar = await vector_client.retrieve_similar(
                 query=request.message,
                 user_id=request.user_id,
                 channel_id=request.channel_id,
-                channel_type=request.channel_type,
-                top_k=10,
+                channel_type="private" if channel.isPrivate else "public",
+                top_k=5,
                 threshold=0.3
             )
-            print(f"Found {len(similar_messages)} similar messages")
-        except Exception as e:
-            print(f"Error retrieving similar messages: {str(e)}")
-            similar_messages = []
-
-        # Format context from similar messages
-        context = []
-        if similar_messages:
-            context_str = "Relevant conversation history:\n"
-            for msg in similar_messages:
-                context_str += f"{msg.sender_name}: {msg.content}\n"
-            context.append(context_str)
-
-        # Add channel context
-        if channel:
-            channel_context = f"\nCurrent channel: {channel.name}"
-            channel_context += f"\nChannel type: {'Private' if channel.isPrivate else 'Public'}"
-            if channel.isPrivate:
-                print("private")
-                member_usernames = [member.username for member in channel.members]
-                channel_context += f"\nThis is a private channel with members: {', '.join(member_usernames)}"
-            if channel.owner:
-                channel_context += f"\nChannel owner: {channel.owner.username}"
-            context.append(channel_context)
-
-        # Prepare the chat completion request
-        messages = [
-            {
-                "role": "system", 
-                "content": """You are ChatGenius, a helpful AI assistant integrated into a chat application. You have access to:
-                1. The conversation history in the current channel
-                2. Information about the current channel and its members
-                3. The current user's query and context
-
-                Guidelines:
-                - Be concise and friendly in your responses
-                - Use the conversation history to provide relevant and contextual responses
-                - When appropriate, reference previous messages or users in your responses
-                - Stay focused on the current channel's context and topic
-                - If you're unsure about something, it's okay to ask for clarification
-                """
+            
+            if similar:
+                context += "\n\nRelevant message history:\n"
+                for msg in similar:
+                    context += f"{msg.sender_name}: {msg.content}\n"
+                
+            # Prepare messages for chat completion
+            messages = [
+                SystemMessage(content=f"""You are a helpful assistant in a chat application.
+                    Current context:
+                    {context}
+                    
+                    Respond naturally and conversationally while using the context to inform your responses.
+                    Keep responses concise but informative."""),
+                HumanMessage(content=request.message)
+            ]
+            
+            # Get chat completion
+            chat = ChatOpenAI(temperature=0.7)
+            response = await chat.ainvoke(messages)
+            
+            return {
+                "response": response.content,
+                "context_used": similar,
+                "confidence": 1.0
             }
-        ]
-        
-        if context:
-            messages.append({"role": "system", "content": "\n".join(context)})
-        
-        if user:
-            messages.append({
-                "role": "system", 
-                "content": f"The current user asking the question is {user.username}."
-            })
             
-        messages.append({"role": "user", "content": request.message})
-        
-        print(f"Request data: {request}")
-        print(f"Channel found: {channel is not None}")
-        print(f"User found: {user is not None}")
-        print(f"Similar messages found: {len(similar_messages)}")
-        print(f"Context built: {context}")
-        
-        # Get response from OpenAI
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4-turbo-preview",
-                messages=messages,
-                temperature=0.7,
-                max_tokens=500
-            )
-            
-            return AssistantResponse(
-                response=response.choices[0].message.content,
-                context_used=context,
-                confidence=response.choices[0].finish_reason == "stop"
-            )
         except Exception as e:
-            print(f"Error getting OpenAI response: {str(e)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to get OpenAI response: {str(e)}"
+                detail=f"Failed to get assistant response: {str(e)}"
             )
-            
-    except Exception as e:
-        print(f"Unexpected error in assistant response: {str(e)}")
-        if "connection" in str(e).lower():
-            # Try to reconnect if it's a connection issue
-            try:
-                await prisma.disconnect()
-                await prisma.connect()
-            except Exception as reconnect_error:
-                print(f"Failed to reconnect: {str(reconnect_error)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected error in assistant response: {str(e)}"
-        )
 
 if __name__ == "__main__":
     import uvicorn

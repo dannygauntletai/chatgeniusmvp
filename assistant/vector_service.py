@@ -1,16 +1,23 @@
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict
-from pinecone import Pinecone, ServerlessSpec
 from prisma import Prisma
 import os
 from dotenv import load_dotenv
-import openai
+from langchain_openai import OpenAIEmbeddings
+from langchain_pinecone import PineconeVectorStore
+from langchain_core.documents import Document
+from pinecone import Pinecone, ServerlessSpec
 from models import Message, InitializeResponse, RetrieveRequest, RetrieveResponse
 import asyncio
+from langsmith import Client
+from langchain_core.tracers.context import tracing_v2_enabled
 
 # Load environment variables
 load_dotenv()
+
+# Initialize LangSmith
+langsmith_client = Client()
 
 # Initialize FastAPI app
 app = FastAPI(title="ChatGenius Assistant Vector Service")
@@ -18,17 +25,21 @@ app = FastAPI(title="ChatGenius Assistant Vector Service")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],  # Frontend URLs
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
-
-# Initialize OpenAI client
-client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Initialize Pinecone
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+
+# Initialize LangChain components
+embeddings = OpenAIEmbeddings(
+    model="text-embedding-3-small",
+    openai_api_key=os.getenv("OPENAI_API_KEY")
+)
 
 # Initialize Prisma client
 prisma = Prisma()
@@ -41,7 +52,6 @@ async def initialize_vector_db():
         try:
             if "chatgenius-messages" in pc.list_indexes():
                 pc.delete_index("chatgenius-messages")
-                # Wait for deletion to complete
                 await asyncio.sleep(5)
         except Exception as e:
             print(f"Error deleting index: {str(e)}")
@@ -61,7 +71,12 @@ async def initialize_vector_db():
                 raise e
             print("Index already exists, proceeding with initialization")
         
-        index = pc.Index("chatgenius-messages")
+        # Initialize vector store
+        vector_store = PineconeVectorStore(
+            index_name="chatgenius-messages",
+            embedding=embeddings,
+            pinecone_api_key=os.getenv("PINECONE_API_KEY")
+        )
         
         # Get all messages from the database
         messages = await prisma.message.find_many(
@@ -71,36 +86,32 @@ async def initialize_vector_db():
             }
         )
         
-        # Create embeddings and upsert to Pinecone
-        vectors = []
+        # Convert messages to documents
+        documents = []
         total_messages = len(messages)
         vectors_created = 0
         
         for msg in messages:
-            embedding = await create_embedding(msg.content)
-            vectors.append({
-                "id": str(msg.id),
-                "values": embedding,
-                "metadata": {
+            if "@assistant" in msg.content:
+                continue
+                
+            doc = Document(
+                page_content=msg.content,
+                metadata={
                     "message_id": str(msg.id),
                     "channel_id": str(msg.channelId),
                     "channel_name": msg.channel.name,
                     "channel_type": "private" if msg.channel.isPrivate else "public",
                     "sender_name": msg.user.username,
-                    "content": msg.content,
                     "thread_id": str(msg.threadId) if msg.threadId else "",
                 }
-            })
+            )
+            documents.append(doc)
             vectors_created += 1
             
-            # Batch upsert every 100 vectors
-            if len(vectors) >= 100:
-                index.upsert(vectors=vectors)
-                vectors = []
-        
-        # Upsert any remaining vectors
-        if vectors:
-            index.upsert(vectors=vectors)
+        # Add documents to vector store
+        if documents:
+            vector_store.add_documents(documents)
             
         return InitializeResponse(
             message="Vector database initialized successfully",
@@ -137,16 +148,14 @@ async def get_user_accessible_channels(user_id: str) -> Dict[str, List[str]]:
         )
         
         # Get private channels user is a member of
-        private_channels = await prisma.channel.find_many(
-            where={
-                "isPrivate": True,
-                "members": {
-                    "some": {
-                        "userId": user_id
-                    }
-                }
+        user = await prisma.user.find_unique(
+            where={"id": user_id},
+            include={
+                "channels": True
             }
         )
+        
+        private_channels = [channel for channel in user.channels if channel.isPrivate] if user else []
         
         channels = {
             "public": [str(c.id) for c in public_channels],
@@ -165,69 +174,61 @@ async def get_user_accessible_channels(user_id: str) -> Dict[str, List[str]]:
 
 @app.post("/retrieve", response_model=RetrieveResponse)
 async def retrieve_similar_messages(request: RetrieveRequest):
-    """
-    Retrieve messages similar to the query using vector similarity search.
-    Context rules:
-    - Public channel: Use all public messages
-    - Private channel: Use all public messages + that private channel's messages
-    """
+    """Retrieve messages similar to the query."""
     try:
-        print(f"Retrieving similar messages for query: {request.query}")
-        # Create embedding for the query
-        query_embedding = await create_embedding(request.query)
-        
-        # Get the index
-        index = pc.Index("chatgenius-messages")
-        
-        # Build filter based on channel type and user access
-        accessible_channels = await get_user_accessible_channels(request.user_id)
-        print(f"User accessible channels: {accessible_channels}")
-        
-        filter_condition = {}
-        if request.channel_type == "private":
-            # For private channels, only include messages from this channel and public channels
-            filter_condition = {
-                "$or": [
-                    {"channel_type": "public"},
-                    {"channel_id": request.channel_id}
-                ]
-            }
-        else:
-            # For public channels, include all public messages
-            filter_condition = {
-                "channel_type": "public"
-            }
+        with tracing_v2_enabled() as tracer:
+            print(f"Retrieving similar messages for query: {request.query}")
             
-        print(f"Using filter condition: {filter_condition}")
-        
-        # Perform similarity search with lower threshold
-        results = index.query(
-            vector=query_embedding,
-            top_k=request.top_k,
-            include_metadata=True,
-            filter=filter_condition
-        )
-        print(f"Raw results: {results}")
-        
-        # Format results
-        messages = []
-        for match in results.matches:
-            if match.score < request.threshold:
-                continue
+            # Get user accessible channels
+            accessible_channels = await get_user_accessible_channels(request.user_id)
+            
+            # Build filter based on channel type and user access
+            filter_dict = {}
+            if request.channel_type == "private":
+                filter_dict = {
+                    "$or": [
+                        {"channel_type": "public"},
+                        {"channel_id": request.channel_id}
+                    ]
+                }
+            else:
+                filter_dict = {
+                    "channel_type": "public"
+                }
+            
+            # Initialize vector store
+            vector_store = PineconeVectorStore(
+                index_name="chatgenius-messages",
+                embedding=embeddings,
+                pinecone_api_key=os.getenv("PINECONE_API_KEY")
+            )
+            
+            # Perform similarity search
+            docs_and_scores = vector_store.similarity_search_with_score(
+                request.query,
+                k=request.top_k,
+                filter=filter_dict
+            )
+            
+            # Format results
+            messages = []
+            for doc, score in docs_and_scores:
+                if score < request.threshold:
+                    continue
                 
-            messages.append(Message(
-                message_id=match.metadata["message_id"],
-                channel_name=match.metadata["channel_name"],
-                sender_name=match.metadata["sender_name"],
-                content=match.metadata["content"],
-                similarity=match.score
-            ))
-        
-        print(f"Returning {len(messages)} messages")
-        return RetrieveResponse(
-            query=request.query,
-            messages=messages
-        )
+                messages.append(Message(
+                    message_id=doc.metadata["message_id"],
+                    channel_name=doc.metadata["channel_name"],
+                    sender_name=doc.metadata["sender_name"],
+                    content=doc.page_content,
+                    similarity=score
+                ))
+            
+            print(f"Returning {len(messages)} messages")
+            return RetrieveResponse(
+                query=request.query,
+                messages=messages
+            )
             
     except Exception as e:
         print(f"Error in retrieve_similar_messages: {str(e)}")
@@ -239,70 +240,64 @@ async def update_vector_db(message_id: str = Body(..., embed=True)):
     print("\n=== VECTOR SERVICE UPDATE ENDPOINT CALLED ===")
     print(f"Received message_id: {message_id}")
     
-    try:
-        print(f"[UPDATE] Received request to update vector for message: {message_id}")
-        
-        # Get the message from the database
-        print("[UPDATE] Fetching message from database...")
-        message = await prisma.message.find_unique(
-            where={"id": message_id},
-            include={
-                "channel": True,
-                "user": True
-            }
-        )
-        
-        if not message:
-            print(f"[UPDATE] Message not found: {message_id}")
-            raise HTTPException(status_code=404, detail="Message not found")
+    with tracing_v2_enabled() as tracer:
+        try:
+            # Initialize vector store
+            vector_store = PineconeVectorStore(
+                index_name="chatgenius-messages",
+                embedding=embeddings,
+                pinecone_api_key=os.getenv("PINECONE_API_KEY")
+            )
             
-        # Create embedding for the message
-        print("[UPDATE] Creating embedding...")
-        embedding = await create_embedding(message.content)
-        print("[UPDATE] Embedding created")
-        
-        # Get the index
-        print("[UPDATE] Connecting to Pinecone index...")
-        index = pc.Index("chatgenius-messages")
-        print("[UPDATE] Connected to Pinecone index")
-        
-        # Prepare vector data
-        vector_data = {
-            "id": str(message.id),
-            "values": embedding,
-            "metadata": {
-                "message_id": str(message.id),
-                "channel_id": str(message.channelId),
-                "channel_name": message.channel.name,
-                "channel_type": "private" if message.channel.isPrivate else "public",
-                "sender_name": message.user.username,
-                "content": message.content,
-                "thread_id": str(message.threadId) if message.threadId else "",
-                "created_at": message.createdAt.isoformat()
-            }
-        }
-        print("[UPDATE] Vector data prepared:", vector_data["metadata"])
-        
-        # Upsert the vector
-        print("[UPDATE] Upserting vector...")
-        index.upsert(vectors=[vector_data])
-        print("[UPDATE] Vector upserted successfully")
-        
-        return {"message": "Vector database updated successfully"}
+            # Get message from database
+            message = await prisma.message.find_unique(
+                where={"id": message_id},
+                include={"user": True, "channel": True}
+            )
             
-    except Exception as e:
-        print(f"[UPDATE] Error updating vector: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+            if not message:
+                raise HTTPException(status_code=404, detail="Message not found")
+            
+            # Skip messages containing @assistant
+            if "@assistant" in message.content:
+                print(f"Skipping message {message_id} - contains @assistant mention")
+                return {"status": "skipped", "reason": "assistant mention"}
+            
+            # Create document
+            doc = Document(
+                page_content=message.content,
+                metadata={
+                    "message_id": message.id,
+                    "channel_id": message.channelId,
+                    "channel_name": message.channel.name if message.channel else None,
+                    "sender_name": message.user.username if message.user else None,
+                }
+            )
+            
+            # Add to vector store
+            await vector_store.aadd_documents([doc])
+            
+            return {"status": "success"}
+            
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to update vector database: {str(e)}"
+            )
 
 @app.post("/delete")
 async def delete_from_vector_db(message_id: str = Body(..., embed=True)):
     """Delete a message from the vector database."""
     try:
-        # Get the index
-        index = pc.Index("chatgenius-messages")
+        # Initialize vector store
+        vector_store = PineconeVectorStore(
+            index_name="chatgenius-messages",
+            embedding=embeddings,
+            pinecone_api_key=os.getenv("PINECONE_API_KEY")
+        )
         
-        # Delete the vector
-        index.delete(ids=[message_id])
+        # Delete by metadata filter
+        vector_store.delete({"message_id": message_id})
         
         return {"message": "Vector deleted successfully"}
             
