@@ -1,5 +1,6 @@
 import { Socket } from 'socket.io';
 import { ThreadService } from '../services/thread.service';
+import { io } from '../app';
 
 interface ThreadMessageData {
   content: string;
@@ -16,9 +17,8 @@ export const handleThreadEvents = (socket: Socket) => {
         userId: data.userId,
       });
 
-      // Emit to the channel room
-      socket.emit('thread:message_created', message);
-      socket.to(message.channelId).emit('thread:message_created', message);
+      // Emit to everyone in the channel room, including the sender
+      io.to(message.channelId).emit('thread:message_created', message);
     } catch (error) {
       console.error('Error creating thread message:', error);
       socket.emit('error', 'Failed to create thread message');

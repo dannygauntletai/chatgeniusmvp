@@ -40,9 +40,9 @@ export const ThreadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
-    socket.on('message:created', handleThreadMessage);
+    socket.on('thread:message_created', handleThreadMessage);
     return () => {
-      socket.off('message:created', handleThreadMessage);
+      socket.off('thread:message_created', handleThreadMessage);
     };
   }, [activeThreadId]);
 
