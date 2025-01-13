@@ -141,6 +141,9 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
         return;
       }
 
+      // Check if we're already a member
+      const isMember = channel.members?.some(m => m.id === userId);
+
       // Update UI first for better responsiveness
       setActiveChannel(channel);
 
@@ -149,8 +152,13 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
         socket.emit('channel:leave', activeChannel.id);
       }
 
-      // Join new channel - this will handle the case where we're already a member
-      await ChannelService.joinChannel(channel.id);
+      // Only try to join if we're not already a member
+      if (!isMember) {
+        await ChannelService.joinChannel(channel.id);
+      } else {
+        // If we're already a member, just join the socket room
+        socket.emit('channel:join', channel.id);
+      }
 
     } catch (error: any) {
       console.error('Failed to switch channel:', error);
