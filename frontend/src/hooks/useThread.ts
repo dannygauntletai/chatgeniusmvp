@@ -3,11 +3,13 @@ import { ThreadService } from '../services/thread.service';
 import { ThreadState, ThreadMessageInput } from '../features/threads/types/thread.types';
 import { Message } from '../features/messages/types/message.types';
 import { socket } from '../services/socket.service';
+import { useUserContext } from '../contexts/UserContext';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 
 export const useThread = (messageId?: string, shouldLoad: boolean = false, initialParentMessage?: Message) => {
+  const { userId, username } = useUserContext();
   const [state, setState] = useState<ThreadState>({
     isLoading: false,
     error: undefined,
@@ -109,14 +111,74 @@ export const useThread = (messageId?: string, shouldLoad: boolean = false, initi
   }, [messageId, loadThreadMessages]);
 
   const createThreadMessage = async (data: ThreadMessageInput) => {
+    // Create a temporary message
+    const tempMessage: Message = {
+      id: `temp-${Date.now()}`,
+      content: data.content,
+      userId,
+      user: {
+        id: userId,
+        username
+      },
+      channelId: state.activeThread?.parentMessage.channelId || '',
+      threadId: data.parentMessageId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      reactions: {}
+    };
+
+    // Add the temporary message to the thread
+    setState(prev => {
+      if (!prev.activeThread) return prev;
+      const newReplies = [...prev.activeThread.replies, tempMessage];
+      return {
+        ...prev,
+        activeThread: {
+          ...prev.activeThread,
+          replies: newReplies,
+          replyCount: newReplies.length,
+          lastReply: tempMessage
+        }
+      };
+    });
+
     try {
       const message = await ThreadService.createThreadMessage(data);
+      // Update the temporary message with the real one
+      setState(prev => {
+        if (!prev.activeThread) return prev;
+        const newReplies = prev.activeThread.replies.map(reply => 
+          reply.id === tempMessage.id ? message : reply
+        );
+        return {
+          ...prev,
+          activeThread: {
+            ...prev.activeThread,
+            replies: newReplies,
+            replyCount: newReplies.length,
+            lastReply: message
+          }
+        };
+      });
       return message;
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        error: 'Failed to create thread message'
-      }));
+      // Remove the temporary message on error
+      setState(prev => {
+        if (!prev.activeThread) return prev;
+        const newReplies = prev.activeThread.replies.filter(reply => 
+          reply.id !== tempMessage.id
+        );
+        return {
+          ...prev,
+          activeThread: {
+            ...prev.activeThread,
+            replies: newReplies,
+            replyCount: newReplies.length,
+            lastReply: newReplies[newReplies.length - 1]
+          },
+          error: 'Failed to create thread message'
+        };
+      });
       throw error;
     }
   };

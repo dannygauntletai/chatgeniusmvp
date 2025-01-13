@@ -17,8 +17,10 @@ export const handleThreadEvents = (socket: Socket) => {
         userId: data.userId,
       });
 
-      // Emit to everyone in the channel room, including the sender
-      io.to(message.channelId).emit('thread:message_created', message);
+      // Emit to sender first for immediate feedback
+      socket.emit('thread:message_created', message);
+      // Then emit to others in the channel
+      socket.to(message.channelId).emit('thread:message_created', message);
     } catch (error) {
       console.error('Error creating thread message:', error);
       socket.emit('error', 'Failed to create thread message');
