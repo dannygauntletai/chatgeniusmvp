@@ -115,22 +115,26 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
     };
   }, [userId, activeChannel, setActiveChannel]);
 
-  const handleChannelClick = (channel: Channel) => {
+  const handleChannelClick = async (channel: Channel) => {
     try {
       if (activeChannel?.id === channel.id) {
         return;
       }
 
-      // Update UI immediately
-      setActiveChannel(channel);
-      console.log('Active channel updated to:', channel);
-
-      // Handle socket events in background
+      // Handle socket events first
       if (activeChannel) {
         socket.emit('channel:leave', activeChannel.id);
       }
 
-      socket.emit('channel:join', channel.id);
+      await new Promise<void>((resolve) => {
+        socket.emit('channel:join', channel.id);
+        // Wait a brief moment for socket operations to complete
+        setTimeout(resolve, 100);
+      });
+
+      // Update UI after socket operations
+      setActiveChannel(channel);
+      console.log('Active channel updated to:', channel);
 
     } catch (error) {
       console.error('Failed to switch channel:', error);
