@@ -41,7 +41,7 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
     // Listen for real-time updates
     socket.on('channel:created', (channel: Channel) => {
       if (!channel.name.startsWith('dm-')) {
-        setChannels(prev => [...prev, channel]);
+        setChannels(prev => [channel, ...prev]);
       }
     });
 
@@ -121,20 +121,22 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
         return;
       }
 
-      // Handle socket events first
+      // Update UI first to prevent flickering
+      setActiveChannel(channel);
+
+      // Handle socket events
       if (activeChannel) {
         socket.emit('channel:leave', activeChannel.id);
       }
+      socket.emit('channel:join', channel.id);
 
-      await new Promise<void>((resolve) => {
-        socket.emit('channel:join', channel.id);
-        // Wait a brief moment for socket operations to complete
-        setTimeout(resolve, 100);
+      // Ensure channel stays in list
+      setChannels(prev => {
+        if (!prev.some(c => c.id === channel.id)) {
+          return [channel, ...prev.filter(c => c.id !== channel.id)];
+        }
+        return prev;
       });
-
-      // Update UI after socket operations
-      setActiveChannel(channel);
-      console.log('Active channel updated to:', channel);
 
     } catch (error) {
       console.error('Failed to switch channel:', error);
