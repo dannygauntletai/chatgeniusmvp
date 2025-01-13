@@ -69,9 +69,18 @@ export class ChannelService {
   }
 
   static async joinChannel(channelId: string): Promise<void> {
-    await api.post(`/api/channels/${channelId}/join`, {});
-    socket.emit('channel:join', channelId);
-    this.clearCache(); // Clear cache when channel membership changes
+    try {
+      await api.post(`/api/channels/${channelId}/join`, {});
+      socket.emit('channel:join', channelId);
+      this.clearCache(); // Clear cache when channel membership changes
+    } catch (error: any) {
+      // If we're already a member, just join the socket room
+      if (error.message?.includes('status: 400')) {
+        socket.emit('channel:join', channelId);
+        return;
+      }
+      throw error;
+    }
   }
 
   static async inviteToChannel(channelId: string, userId: string): Promise<void> {

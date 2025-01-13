@@ -140,19 +140,23 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
         return;
       }
 
-      // Handle socket events first
+      // Update UI first for better responsiveness
+      setActiveChannel(channel);
+
+      // Handle socket events
       if (activeChannel) {
         socket.emit('channel:leave', activeChannel.id);
       }
 
-      // Join new channel
+      // Join new channel - this will handle the case where we're already a member
       await ChannelService.joinChannel(channel.id);
-      
-      // Update UI state
-      setActiveChannel(channel);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to switch channel:', error);
+      // Only revert UI if it's not a 400 error (not already a member)
+      if (!error.message?.includes('status: 400')) {
+        setActiveChannel(activeChannel);
+      }
     }
   };
 
