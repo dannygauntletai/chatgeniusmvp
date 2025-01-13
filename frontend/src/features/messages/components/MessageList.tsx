@@ -158,17 +158,42 @@ const MessageListContent = () => {
       return;
     }
 
-    socket.emit('channel:join', activeChannel.id);
-
+    let mounted = true;
     setLoading(true);
-    MessageService.getChannelMessages(activeChannel.id)
-      .then(data => {
+
+    // Join channel room and wait for connection
+    const joinChannel = () => {
+      return new Promise<void>((resolve) => {
+        socket.emit('channel:join', activeChannel.id);
+        // Wait a brief moment to ensure we're connected
+        setTimeout(resolve, 100);
+      });
+    };
+
+    // Load messages after joining channel
+    const loadMessages = async () => {
+      try {
+        await joinChannel();
+        if (!mounted) return;
+
+        const data = await MessageService.getChannelMessages(activeChannel.id);
+        if (!mounted) return;
+
         setMessages(data.filter(message => !message.threadId));
         setError(null);
         messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-      })
-      .catch(() => setError('Failed to load messages'))
-      .finally(() => setLoading(false));
+      } catch (err) {
+        if (mounted) {
+          setError('Failed to load messages');
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadMessages();
 
     const handleNewMessage = (message: Message) => {
       if (message.channelId === activeChannel.id && !message.threadId) {
@@ -193,6 +218,7 @@ const MessageListContent = () => {
     socket.on('message:created', handleNewMessage);
 
     return () => {
+      mounted = false;
       socket.off('message:created', handleNewMessage);
       socket.emit('channel:leave', activeChannel.id);
     };

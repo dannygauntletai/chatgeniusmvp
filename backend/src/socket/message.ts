@@ -27,10 +27,11 @@ export const handleMessageEvents = (socket: Socket) => {
         },
       });
       console.log('Created message:', message);
-      socket.emit('message:created', message);
       socket.to(data.channelId).emit('message:created', message);
+      socket.emit('message:created', message);
     } catch (error) {
       console.error('Error creating message:', error);
+      socket.emit('error', 'Failed to create message');
     }
   });
 
