@@ -4,9 +4,6 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /opt/render/project/src
 
-# Create Prisma cache directory
-RUN mkdir -p /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053
-
 # Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -28,18 +25,18 @@ COPY document_requirements.txt requirements.txt
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy Prisma schema first
-COPY prisma ./prisma/
+# Copy application code
+COPY . .
 
-# Generate Prisma client and fetch query engine for the correct platform
+# Create cache directory
+RUN mkdir -p /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053
+
+# Generate Prisma client and fetch query engine
 RUN cd prisma && \
     prisma generate && \
     prisma py fetch --platform debian-openssl-3.0.x && \
     mv prisma-query-engine-* /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/prisma-query-engine-debian-openssl-3.0.x && \
-    chmod +x /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/prisma-query-engine-debian-openssl-3.0.x
-
-# Copy remaining application code
-COPY . .
+    chmod -R 777 /opt/render/.cache/prisma-python
 
 # Expose port
 EXPOSE 8004

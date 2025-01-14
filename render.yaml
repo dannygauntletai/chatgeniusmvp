@@ -41,11 +41,11 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: VECTOR_SERVICE_URL
-        value: https://vector-service.onrender.com
+        value: https://chatgeniusmvp-vector.onrender.com
       - key: PHONE_SERVICE_URL
-        value: https://phone-service.onrender.com
+        value: https://chatgeniusmvp-phone.onrender.com
       - key: DOCUMENT_SERVICE_URL
-        value: https://document-service.onrender.com
+        value: https://chatgeniusmvp-document.onrender.com
       - key: FRONTEND_URL
         value: https://chatgenius.fyi
       - key: LANGCHAIN_API_KEY
