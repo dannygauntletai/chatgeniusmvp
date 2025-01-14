@@ -1,5 +1,6 @@
 import { createContext, useContext, ReactNode, useEffect } from 'react';
 import { useUser as useClerkUser, useAuth, useSession } from '@clerk/clerk-react';
+import { setAuthToken } from '../services/api.service';
 
 interface UserContextType {
   userId: string;
@@ -18,29 +19,47 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const updateToken = async () => {
       if (user && session) {
         try {
+          console.log('Updating token for user:', user.id);
           // Get a fresh session token
           const token = await getToken();
           if (token) {
-            // Store the session token
-            localStorage.setItem('authToken', `${session.id}__${token}`);
+            console.log('Got new token from Clerk');
+            // Store just the JWT token, not the session ID
+            localStorage.setItem('authToken', token);
+            setAuthToken(token);
+          } else {
+            console.warn('No token received from Clerk');
+            localStorage.removeItem('authToken');
+            setAuthToken(null);
           }
         } catch (error) {
           console.error('Error getting token:', error);
           // Clear invalid token
           localStorage.removeItem('authToken');
+          setAuthToken(null);
         }
       } else {
+        console.log('No user or session, clearing token');
         // Clear token if no user or session
         localStorage.removeItem('authToken');
+        setAuthToken(null);
       }
     };
 
+    console.log('Setting up token management');
     updateToken();
 
-    // Set up token refresh
-    const refreshInterval = setInterval(updateToken, 1000 * 60 * 29); // Refresh every 29 minutes
+    // Set up token refresh - align with Clerk's session lifetime
+    const refreshInterval = setInterval(() => {
+      console.log('Token refresh triggered');
+      updateToken();
+    }, 1000 * 60 * 29); // Refresh every 29 minutes
 
-    return () => clearInterval(refreshInterval);
+    return () => {
+      console.log('Cleaning up token management');
+      clearInterval(refreshInterval);
+      setAuthToken(null);
+    };
   }, [user, session, getToken]);
 
   if (!isLoaded) {
@@ -55,10 +74,12 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     return null;
   }
 
+  const storedToken = localStorage.getItem('authToken');
+
   return (
     <UserContext.Provider value={{ 
       userId: user.id, 
-      token: localStorage.getItem('authToken'),
+      token: storedToken,
       username: user.username || user.firstName || 'Anonymous'
     }}>
       {children}
@@ -66,13 +87,14 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useUserContext = () => {
+// Main hook for accessing user context
+export const useUser = () => {
   const context = useContext(UserContext);
-  if (!context) {
-    throw new Error('useUserContext must be used within a UserProvider');
+  if (context === undefined) {
+    throw new Error('useUser must be used within a UserProvider');
   }
   return context;
 };
 
-// Re-export Clerk's useUser hook
-export const useUser = useClerkUser; 
+// Alias for backward compatibility
+export const useUserContext = useUser; 
