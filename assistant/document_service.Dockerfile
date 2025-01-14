@@ -29,13 +29,20 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY prisma ./prisma/
 
 # Generate Prisma client and fetch query engine
-RUN cd prisma && \
-    prisma generate && \
+WORKDIR /app/prisma
+RUN prisma generate && \
     prisma py fetch && \
-    chmod +x prisma-query-engine-*
+    chmod +x prisma-query-engine-* && \
+    mv prisma-query-engine-* ../prisma-query-engine-debian-openssl-3.0.x && \
+    cd .. && \
+    chmod -R 777 .
 
-# Copy remaining application code
+# Reset working directory and copy remaining code
+WORKDIR /app
 COPY . .
+
+# Ensure the query engine is executable
+RUN chmod +x prisma-query-engine-*
 
 # Expose port
 EXPOSE 8004
