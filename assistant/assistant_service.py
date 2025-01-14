@@ -330,27 +330,33 @@ async def get_assistant_response(request: AssistantRequest):
             
             # Get chat completion
             chat = ChatOpenAI(temperature=0.7)
-            response = await chat.ainvoke(messages)
             
-            # Only check for call request if no document content was found
-            if not any("Document:" in msg.channel_name for msg in similar):
-                try:
-                    is_call, call_details = await phone_client.extract_call_details(request.message, "")
-                    if is_call and call_details:
-                        try:
-                            call_result = await phone_client.make_call(
-                                call_details["phone_number"], 
-                                call_details["message"]
-                            )
-                            return {
-                                "response": f"I've initiated a call to {call_details['phone_number']}. I'll say: '{call_details['message']}'\n\nCall status: {call_result['status']}",
-                                "context_used": [],
-                                "confidence": 1.0
-                            }
-                        except Exception as e:
-                            print(f"Error making call: {str(e)}")
-                except Exception as e:
-                    print(f"Error processing call request: {str(e)}")
+            # Check for call request first
+            try:
+                is_call, call_details = await phone_client.extract_call_details(request.message, "")
+                if is_call and call_details:
+                    try:
+                        call_result = await phone_client.make_call(
+                            call_details["phone_number"], 
+                            call_details["message"]
+                        )
+                        return {
+                            "response": f"I've initiated a call to {call_details['phone_number']}. I'll say: '{call_details['message']}'\n\nCall status: {call_result['status']}",
+                            "context_used": [],
+                            "confidence": 1.0
+                        }
+                    except Exception as e:
+                        print(f"Error making call: {str(e)}")
+                        return {
+                            "response": f"I encountered an error while trying to make the call: {str(e)}",
+                            "context_used": [],
+                            "confidence": 1.0
+                        }
+            except Exception as e:
+                print(f"Error processing call request: {str(e)}")
+            
+            # If no call request or call failed, proceed with normal response
+            response = await chat.ainvoke(messages)
             
             return {
                 "response": response.content,

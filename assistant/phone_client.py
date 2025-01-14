@@ -1,11 +1,16 @@
 import aiohttp
 from typing import Dict, Optional, Tuple
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class PhoneServiceClient:
     """Client for interacting with the phone service."""
     
-    def __init__(self, base_url: str = "http://localhost:8003"):
-        self.base_url = base_url
+    def __init__(self, base_url: str = None):
+        self.base_url = base_url or os.getenv("PHONE_SERVICE_URL", "http://localhost:8003")
         self.session = None
         
     async def _ensure_session(self):
