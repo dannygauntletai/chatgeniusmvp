@@ -32,7 +32,14 @@ app = FastAPI(title="ChatGenius Assistant Service")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://chatgenius.fyi",
+        os.getenv("FRONTEND_URL", ""),
+        os.getenv("VECTOR_SERVICE_URL", ""),
+        os.getenv("PHONE_SERVICE_URL", ""),
+        os.getenv("DOCUMENT_SERVICE_URL", "")
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -356,4 +363,5 @@ async def get_assistant_response(request: AssistantRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8002) 
+    port = int(os.getenv("PORT", "8002"))
+    uvicorn.run(app, host="0.0.0.0", port=port) 

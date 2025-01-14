@@ -25,7 +25,14 @@ chat = ChatOpenAI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://chatgenius.fyi",
+        os.getenv("FRONTEND_URL", ""),
+        os.getenv("VECTOR_SERVICE_URL", ""),
+        os.getenv("ASSISTANT_SERVICE_URL", ""),
+        os.getenv("DOCUMENT_SERVICE_URL", "")
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -195,4 +202,5 @@ async def extract_call_details(message: str, context: Optional[str] = None) -> O
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8003) 
+    port = int(os.getenv("PORT", "8003"))
+    uvicorn.run(app, host="0.0.0.0", port=port) 
