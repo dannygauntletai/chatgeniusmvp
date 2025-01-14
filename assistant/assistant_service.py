@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict
+from typing import List, Dict, Optional
 from prisma import Prisma
 import openai
 from dotenv import load_dotenv
@@ -11,6 +11,7 @@ from langsmith import Client
 from langchain_core.tracers.context import tracing_v2_enabled
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_openai import ChatOpenAI
+from phone_client import PhoneServiceClient
 
 # Load environment variables
 load_dotenv()
@@ -46,6 +47,9 @@ prisma = Prisma(auto_register=True)
 # Initialize Vector Service client
 vector_client = VectorServiceClient()
 
+# Initialize Phone Service client
+phone_client = PhoneServiceClient()
+
 @app.on_event("startup")
 async def startup():
     try:
@@ -62,6 +66,7 @@ async def shutdown():
         print("Disconnecting from database...")
         await prisma.disconnect()
         await vector_client.close()
+        await phone_client.close()
         print("Cleanup completed")
     except Exception as e:
         print(f"Error during shutdown: {str(e)}")
@@ -158,6 +163,35 @@ async def format_vector_messages_for_context(messages: List[Dict]) -> str:
         )
     return "\n".join(context)
 
+async def extract_call_details(message: str) -> Optional[Dict]:
+    """Extract phone number and message from natural language request."""
+    system_prompt = """You are a helpful assistant that extracts phone call details from natural language requests.
+    If the message contains a request to make a phone call, return a JSON with:
+    - phone_number: the phone number to call
+    - message: what should be said in the call
+    If it's not a call request, return null.
+    
+    Examples:
+    "call 123-456-7890 and tell them hello" -> {"phone_number": "123-456-7890", "message": "hello"}
+    "can you call +1-555-0123 to order a pizza" -> {"phone_number": "+1-555-0123", "message": "I would like to order a pizza"}
+    "what's the weather like?" -> null
+    """
+    
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=message)
+    ]
+    
+    try:
+        response = await chat.ainvoke(messages)
+        if "null" in response.content.lower():
+            return None
+            
+        import json
+        return json.loads(response.content)
+    except:
+        return None
+
 @app.post("/assist", response_model=AssistantResponse)
 async def get_assistant_response(request: AssistantRequest):
     """Get a response from the assistant with context."""
@@ -185,7 +219,68 @@ async def get_assistant_response(request: AssistantRequest):
             if not channel or not user:
                 raise HTTPException(status_code=404, detail="Channel or user not found")
             
-            # Build context string
+            # Get recent messages for context
+            recent_messages = await prisma.message.find_many(
+                where={
+                    "channelId": channel.id,
+                    "NOT": {
+                        "content": {
+                            "contains": "@assistant"
+                        }
+                    }
+                },
+                include={
+                    "user": True,
+                    "thread": True
+                },
+                order={
+                    "createdAt": "desc"
+                },
+                take=10
+            )
+            
+            # Build context for call requests
+            call_context = ""
+            if recent_messages:
+                relevant_messages = []
+                for msg in reversed(recent_messages):  # Process in chronological order
+                    if msg.user and msg.user.id == request.user_id:
+                        # Only include messages that might contain preferences or relevant info
+                        if any(keyword in msg.content.lower() for keyword in ["like", "prefer", "want", "need", "allerg", "no ", "don't"]):
+                            relevant_messages.append(f"User mentioned: {msg.content}")
+                call_context = "\n".join(relevant_messages)
+            
+            # Check if this is a call request
+            try:
+                print(f"Processing potential call request: {request.message}")  # Debug print
+                print(f"Call context: {call_context}")  # Debug print
+                
+                is_call, call_details = await phone_client.extract_call_details(request.message, call_context)
+                print(f"Call extraction result - is_call: {is_call}, details: {call_details}")  # Debug print
+                
+                if is_call and call_details:
+                    try:
+                        call_result = await phone_client.make_call(
+                            call_details["phone_number"], 
+                            call_details["message"]
+                        )
+                        return {
+                            "response": f"I've initiated a call to {call_details['phone_number']}. I'll say: '{call_details['message']}'\n\nCall status: {call_result['status']}",
+                            "context_used": [],
+                            "confidence": 1.0
+                        }
+                    except Exception as e:
+                        print(f"Error making call: {str(e)}")  # Debug print
+                        return {
+                            "response": f"I wasn't able to make the call: {str(e)}",
+                            "context_used": [],
+                            "confidence": 1.0
+                        }
+            except Exception as e:
+                print(f"Error processing call request: {str(e)}")  # Debug print
+                # Continue with normal message processing if call extraction fails
+            
+            # Build context string for chat
             context = ""
             
             # Add channel context
@@ -251,6 +346,12 @@ async def get_assistant_response(request: AssistantRequest):
                 SystemMessage(content=f"""You are a helpful assistant in a chat application.
                     Current context:
                     {context}
+                    
+                    You can help users make phone calls by understanding natural language requests.
+                    Examples:
+                    - "Can you call the pizza place at +1-555-0123?"
+                    - "Please contact 123-456-7890 and order some food"
+                    - "Make a reservation by calling +1-999-8888"
                     
                     Respond naturally and conversationally while using the context to inform your responses.
                     Keep responses concise but informative."""),
