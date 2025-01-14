@@ -370,9 +370,12 @@ export class ChannelController {
               { members: { some: { id: userId } } },
               { name: { 
                 not: { 
-                  in: ['dm-', PUBLIC_BUCKET_NAME]
+                  startsWith: 'dm-'
                 }
-              } }
+              }},
+              { name: {
+                not: PUBLIC_BUCKET_NAME
+              }}
             ]
           },
           include: {

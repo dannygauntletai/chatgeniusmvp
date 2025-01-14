@@ -9,7 +9,7 @@ langchain-openai>=0.0.5
 langchain-pinecone>=0.0.3
 langchain-core>=0.1.18
 langchain-community>=0.0.16
-langchain-text-splitter>=0.0.1
+langchain==0.2.15
 langsmith>=0.1.4
 aiohttp>=3.9.0
 python-multipart>=0.0.6 
