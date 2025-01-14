@@ -25,12 +25,17 @@ COPY document_requirements.txt requirements.txt
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy Prisma schema first
+COPY prisma ./prisma/
 
-# Set up Prisma
-RUN prisma generate && \
-    prisma py fetch
+# Generate Prisma client and fetch query engine
+RUN cd prisma && \
+    prisma generate && \
+    prisma py fetch && \
+    chmod +x prisma-query-engine-*
+
+# Copy remaining application code
+COPY . .
 
 # Expose port
 EXPOSE 8004
