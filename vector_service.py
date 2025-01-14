@@ -9,6 +9,7 @@ from langchain_pinecone import PineconeVectorStore
 from langchain.prompts.prompt import PromptTemplate
 from pinecone import Pinecone, ServerlessSpec
 from openai import OpenAI
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables
 load_dotenv()
@@ -25,6 +26,27 @@ os.environ["DATABASE_URL"] = os.getenv("DATABASE_URL")
 
 # Initialize FastAPI app
 app = FastAPI(title="ChatGenius Assistant Vector Service")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "https://chatgenius.fyi",
+        os.getenv("FRONTEND_URL", ""),
+        "https://chatgeniusmvp.onrender.com",
+        "https://chatgeniusmvp-vector.onrender.com",
+        "https://chatgeniusmvp-document.onrender.com",
+        "https://chatgeniusmvp-phone.onrender.com",
+        os.getenv("VECTOR_SERVICE_URL", ""),
+        os.getenv("ASSISTANT_SERVICE_URL", ""),
+        os.getenv("PHONE_SERVICE_URL", "")
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"]
+)
 
 # Initialize Pinecone
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))

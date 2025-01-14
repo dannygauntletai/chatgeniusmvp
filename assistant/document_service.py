@@ -30,6 +30,10 @@ app.add_middleware(
         "http://localhost:3000",
         "https://chatgenius.fyi",
         os.getenv("FRONTEND_URL", ""),
+        "https://chatgeniusmvp.onrender.com",
+        "https://chatgeniusmvp-vector.onrender.com",
+        "https://chatgeniusmvp-document.onrender.com",
+        "https://chatgeniusmvp-phone.onrender.com",
         os.getenv("VECTOR_SERVICE_URL", ""),
         os.getenv("ASSISTANT_SERVICE_URL", ""),
         os.getenv("PHONE_SERVICE_URL", "")
