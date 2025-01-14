@@ -1,11 +1,10 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { FileController } from '../controllers/file.controller';
 import { DocumentController } from '../controllers/document.controller';
 import { requireAuth } from '../middleware/auth.middleware';
-import { Request } from 'express';
 
-// Add MulterRequest type
+// Add MulterRequest type using the global Express namespace
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
 }
@@ -22,31 +21,32 @@ const upload = multer({
 });
 
 // File upload endpoint
-router.post('/upload', requireAuth, upload.single('file'), (req: MulterRequest, res) => {
+router.post('/upload', requireAuth, upload.single('file'), async (req: MulterRequest, res: Response): Promise<void> => {
   if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
+    res.status(400).json({ error: 'No file uploaded' });
+    return;
   }
-  return fileController.uploadFile(req as MulterRequest, res);
+  await fileController.uploadFile(req as MulterRequest, res);
 });
 
 // Get files for a channel
-router.get('/channel/:channelId', requireAuth, (req, res) =>
-  fileController.getChannelFiles(req, res)
-);
+router.get('/channel/:channelId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  await fileController.getChannelFiles(req, res);
+});
 
 // Get files for a user
-router.get('/user/:userId', requireAuth, (req, res) =>
-  fileController.getUserFiles(req, res)
-);
+router.get('/user/:userId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  await fileController.getUserFiles(req, res);
+});
 
 // Update file status - no auth required as it's called by document service
-router.put('/:fileId/status', (req, res) =>
-  fileController.updateFileStatus(req, res)
-);
+router.put('/:fileId/status', async (req: Request, res: Response): Promise<void> => {
+  await fileController.updateFileStatus(req, res);
+});
 
 // Document processing webhook - no auth required as it's called by Supabase
-router.post('/webhook/process', (req, res) =>
-  documentController.processWebhook(req, res)
-);
+router.post('/webhook/process', async (req: Request, res: Response): Promise<void> => {
+  await documentController.processWebhook(req, res);
+});
 
 export default router; 

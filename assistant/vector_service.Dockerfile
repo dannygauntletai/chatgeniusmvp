@@ -16,20 +16,24 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
     npm install -g npm@latest
 
+# Install Prisma CLI
+RUN npm install -g prisma
+
 # Copy requirements file
-COPY vector_requirements.txt .
+COPY vector_requirements.txt requirements.txt
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r vector_requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Generate Prisma client
-RUN prisma generate
+# Set up Prisma
+RUN prisma generate && \
+    prisma py fetch
 
 # Expose port
-EXPOSE 8001
+EXPOSE 8003
 
 # Start the application
-CMD ["uvicorn", "vector_service:app", "--host", "0.0.0.0", "--port", "8001"] 
+CMD ["uvicorn", "vector_service:app", "--host", "0.0.0.0", "--port", "8003"] 

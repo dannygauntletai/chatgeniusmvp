@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -73,8 +73,13 @@ app.use('/api/threads', requireAuth, threadRoutes);
 app.use('/api/users', requireAuth, userRoutes);
 app.use('/api/files', requireAuth, fileRoutes);
 
+// Error handling middleware
+const errorHandlerMiddleware: ErrorRequestHandler = (err: Error, req: Request, res: Response, next: NextFunction): void => {
+  errorHandler(err, req, res, next);
+};
+
 // Error handling
-app.use(errorHandler);
+app.use(errorHandlerMiddleware);
 
 // Server configuration
 const PORT = process.env.PORT || 5000;

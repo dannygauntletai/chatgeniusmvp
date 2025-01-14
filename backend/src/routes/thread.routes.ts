@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express';
 import { ThreadController } from '../controllers/thread.controller';
 import { AuthenticatedRequest } from '../types/request.types';
 import { requireAuth } from '../middleware/auth.middleware';
@@ -8,22 +8,12 @@ const router = Router();
 // Apply auth middleware to all routes
 router.use(requireAuth);
 
-// Get thread messages
-router.get('/:parentMessageId', (req, res, next) => {
-  const authReq = req as unknown as AuthenticatedRequest;
-  return ThreadController.getThreadMessages(authReq, res, next);
-});
+const handleRequest = (handler: (req: AuthenticatedRequest, res: any, next: any) => Promise<any>): RequestHandler => {
+  return (req, res, next) => handler(req as unknown as AuthenticatedRequest, res, next);
+};
 
-// Create thread message
-router.post('/', (req, res, next) => {
-  const authReq = req as unknown as AuthenticatedRequest;
-  return ThreadController.createThreadMessage(authReq, res, next);
-});
-
-// Update thread message
-router.put('/:messageId', (req, res, next) => {
-  const authReq = req as unknown as AuthenticatedRequest;
-  return ThreadController.updateThreadMessage(authReq, res, next);
-});
+router.post('/messages', handleRequest(ThreadController.createThreadMessage));
+router.get('/:parentMessageId/messages', handleRequest(ThreadController.getThreadMessages));
+router.put('/messages/:messageId', handleRequest(ThreadController.updateThreadMessage));
 
 export default router; 

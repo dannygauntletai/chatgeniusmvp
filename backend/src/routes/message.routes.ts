@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express';
 import { MessageController } from '../controllers/message.controller';
 import { AuthenticatedRequest } from '../types/request.types';
 import { requireAuth } from '../middleware/auth.middleware';
@@ -8,22 +8,12 @@ const router = Router();
 // Apply auth middleware to all routes
 router.use(requireAuth);
 
-// Get messages for a channel
-router.get('/channel/:channelId', (req, res, next) => {
-  const authReq = req as unknown as AuthenticatedRequest;
-  return MessageController.getChannelMessages(authReq, res, next);
-});
+const handleRequest = (handler: (req: AuthenticatedRequest, res: any, next: any) => Promise<any>): RequestHandler => {
+  return (req, res, next) => handler(req as unknown as AuthenticatedRequest, res, next);
+};
 
-// Update message
-router.put('/:messageId', (req, res, next) => {
-  const authReq = req as unknown as AuthenticatedRequest;
-  return MessageController.updateMessage(authReq, res, next);
-});
-
-// Send a message
-router.post('/', (req, res, next) => {
-  const authReq = req as unknown as AuthenticatedRequest;
-  return MessageController.createMessage(authReq, res, next);
-});
+router.post('/', handleRequest(MessageController.createMessage));
+router.get('/channel/:channelId', handleRequest(MessageController.getChannelMessages));
+router.put('/:messageId', handleRequest(MessageController.updateMessage));
 
 export default router; 

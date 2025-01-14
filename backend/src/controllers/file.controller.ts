@@ -1,15 +1,14 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
+import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import fetch from 'node-fetch';
-import { createClient } from '@supabase/supabase-js';
 
-// Update MulterRequest type
+// Update MulterRequest type using the global Express namespace
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
 }
 
-const prisma = new PrismaClient();
 const PUBLIC_BUCKET_NAME = 'Public Files';
 const DOCUMENT_SERVICE_URL = process.env.DOCUMENT_SERVICE_URL || 'http://localhost:8004';
 

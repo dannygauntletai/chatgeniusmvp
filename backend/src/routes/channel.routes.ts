@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express';
 import { ChannelController } from '../controllers/channel.controller';
 import { AuthenticatedRequest } from '../types/request.types';
 import { requireAuth } from '../middleware/auth.middleware';
@@ -8,18 +8,16 @@ const router = Router();
 // Apply auth middleware to all routes
 router.use(requireAuth);
 
-router.post('/', (req, res, next) => ChannelController.createChannel(req as unknown as AuthenticatedRequest, res, next));
-router.get('/', (req, res, next) => ChannelController.getChannels(req as unknown as AuthenticatedRequest, res, next));
-router.post('/:channelId/join', (req, res, next) => ChannelController.joinChannel(req as unknown as AuthenticatedRequest, res, next));
-router.post('/:channelId/invite', (req, res, next) => ChannelController.inviteToChannel(req as unknown as AuthenticatedRequest, res, next));
-router.post('/:channelId/leave', (req, res, next) => {
-  console.log('Leave channel route hit:', {
-    channelId: req.params.channelId,
-    userId: (req as unknown as AuthenticatedRequest).auth?.userId
-  });
-  return ChannelController.leaveChannel(req as unknown as AuthenticatedRequest, res, next);
-});
-router.post('/:channelId/remove-member', (req, res, next) => ChannelController.removeMember(req as unknown as AuthenticatedRequest, res, next));
-router.delete('/:channelId', (req, res, next) => ChannelController.deleteChannel(req as unknown as AuthenticatedRequest, res, next));
+const handleRequest = (handler: (req: AuthenticatedRequest, res: any, next: any) => Promise<any>): RequestHandler => {
+  return (req, res, next) => handler(req as unknown as AuthenticatedRequest, res, next);
+};
+
+router.post('/', handleRequest(ChannelController.createChannel));
+router.get('/', handleRequest(ChannelController.getChannels));
+router.post('/:channelId/join', handleRequest(ChannelController.joinChannel));
+router.post('/:channelId/invite', handleRequest(ChannelController.inviteToChannel));
+router.post('/:channelId/leave', handleRequest(ChannelController.leaveChannel));
+router.post('/:channelId/remove-member', handleRequest(ChannelController.removeMember));
+router.delete('/:channelId', handleRequest(ChannelController.deleteChannel));
 
 export default router; 
