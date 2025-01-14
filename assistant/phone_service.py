@@ -33,6 +33,7 @@ app.add_middleware(
         "https://chatgeniusmvp-vector.onrender.com",
         "https://chatgeniusmvp-document.onrender.com",
         "https://chatgeniusmvp-phone.onrender.com",
+        "https://chatgeniusmvp-backend.onrender.com",
         os.getenv("VECTOR_SERVICE_URL", ""),
         os.getenv("ASSISTANT_SERVICE_URL", ""),
         os.getenv("DOCUMENT_SERVICE_URL", "")

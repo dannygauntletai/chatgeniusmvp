@@ -1,4 +1,4 @@
-from langchain_text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Pinecone
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_community.embeddings import OpenAIEmbeddings
@@ -34,6 +34,7 @@ app.add_middleware(
         "https://chatgeniusmvp-vector.onrender.com",
         "https://chatgeniusmvp-document.onrender.com",
         "https://chatgeniusmvp-phone.onrender.com",
+        "https://chatgeniusmvp-backend.onrender.com",
         os.getenv("VECTOR_SERVICE_URL", ""),
         os.getenv("ASSISTANT_SERVICE_URL", ""),
         os.getenv("PHONE_SERVICE_URL", "")
