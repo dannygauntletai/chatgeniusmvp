@@ -101,8 +101,8 @@ const DashboardLayout = () => {
   }
 
   return (
-    <SignedIn>
-      <UserProvider>
+    <UserProvider>
+      <SignedIn>
         <ChannelProvider>
           <MainLayout>
             <div className="flex-1 flex flex-col">
@@ -110,8 +110,8 @@ const DashboardLayout = () => {
             </div>
           </MainLayout>
         </ChannelProvider>
-      </UserProvider>
-    </SignedIn>
+      </SignedIn>
+    </UserProvider>
   );
 };
 

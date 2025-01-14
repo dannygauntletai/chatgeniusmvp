@@ -39,8 +39,8 @@ const fetchWithAuth = async <T>(endpoint: string, options: RequestInit = {}): Pr
     if (!response.ok) {
       console.error(`Request failed: ${response.status} ${response.statusText}`);
       
-      // If it's a 401 and we have a token, try to refresh
-      if (response.status === 401 && token) {
+      // If it's a 401, try to get a new token
+      if (response.status === 401) {
         // If already refreshing, wait for it to complete
         if (isRefreshing) {
           return new Promise<T>(resolve => {
@@ -51,15 +51,39 @@ const fetchWithAuth = async <T>(endpoint: string, options: RequestInit = {}): Pr
         isRefreshing = true;
         
         try {
-          // Try to get a new token from localStorage (might have been refreshed by UserContext)
+          // Wait a short time for UserContext to potentially update the token
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Try to get a new token from localStorage
           const newToken = localStorage.getItem('authToken');
-          if (newToken && newToken !== token) {
-            console.log('Found newer token in localStorage, retrying request');
+          if (newToken && (!token || newToken !== token)) {
+            console.log('Found new token, retrying request');
             setAuthToken(newToken);
             isRefreshing = false;
             failedRequests.forEach(callback => callback());
             failedRequests = [];
             return fetchWithAuth(endpoint, options);
+          }
+
+          // If no new token was found, try to force a token refresh via UserContext
+          const userContext = document.querySelector('[data-user-context]');
+          if (userContext) {
+            const refreshEvent = new CustomEvent('refresh-token');
+            userContext.dispatchEvent(refreshEvent);
+            
+            // Wait for potential token refresh
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Check one more time for a new token
+            const finalToken = localStorage.getItem('authToken');
+            if (finalToken && (!token || finalToken !== token)) {
+              console.log('Got new token after refresh, retrying request');
+              setAuthToken(finalToken);
+              isRefreshing = false;
+              failedRequests.forEach(callback => callback());
+              failedRequests = [];
+              return fetchWithAuth(endpoint, options);
+            }
           }
         } catch (error) {
           console.error('Error during token refresh:', error);
@@ -79,8 +103,8 @@ const fetchWithAuth = async <T>(endpoint: string, options: RequestInit = {}): Pr
     return data as T;
   } catch (error) {
     if ((error as any).status === 401) {
-      setAuthToken(null);
-      localStorage.removeItem('authToken');
+      // Don't clear the token immediately, let the refresh attempt handle it
+      console.log('Auth error - token refresh will be attempted');
     }
     throw error;
   }

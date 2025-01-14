@@ -1,116 +1,83 @@
-import { createContext, useContext, ReactNode, useEffect, useCallback, useRef } from 'react';
+import { createContext, useContext, ReactNode, useEffect, useCallback, useRef, useState } from 'react';
 import { useUser as useClerkUser, useAuth, useSession } from '@clerk/clerk-react';
 import { setAuthToken } from '../services/api.service';
 
 interface UserContextType {
-  userId: string;
+  userId: string | null;
   token: string | null;
-  username: string;
-  refreshToken: () => Promise<string | null>;
+  username: string | null;
+  refreshToken: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-export const UserProvider = ({ children }: { children: ReactNode }) => {
-  const { user, isLoaded } = useClerkUser();
-  const { getToken } = useAuth();
+export const UserProvider = ({ children }: { children: React.ReactNode }) => {
+  const { isLoaded, isSignedIn, user } = useClerkUser();
   const { session } = useSession();
   const lastTokenRef = useRef<string | null>(null);
+  const [userState, setUserState] = useState<any | null>(null);
+  const [sessionState, setSessionState] = useState<any | null>(null);
 
   const updateToken = useCallback(async (force: boolean = false) => {
-    if (!user || !session) {
-      console.log('No user or session, clearing token');
-      localStorage.removeItem('authToken');
-      setAuthToken(null);
-      lastTokenRef.current = null;
-      return null;
-    }
+    if (!isLoaded) return;
 
     try {
-      // Only update if forced or token has changed
-      const currentToken = localStorage.getItem('authToken');
-      if (!force && currentToken && currentToken === lastTokenRef.current) {
-        console.log('Token is still valid, skipping update');
-        return currentToken;
+      if (!isSignedIn || !session) {
+        setAuthToken(null);
+        localStorage.removeItem('authToken');
+        return;
       }
 
-      console.log('Updating token for user:', user.id);
-      const token = await getToken();
-      if (token && token !== lastTokenRef.current) {
-        console.log('Got new token from Clerk');
-        localStorage.setItem('authToken', token);
+      const token = await session.getToken();
+      if (force || !lastTokenRef.current || token !== lastTokenRef.current) {
+        console.log('Updating token');
         setAuthToken(token);
+        if (token) {
+          localStorage.setItem('authToken', token);
+        }
         lastTokenRef.current = token;
-        return token;
-      } else if (!token) {
-        console.warn('No token received from Clerk');
-        localStorage.removeItem('authToken');
-        setAuthToken(null);
-        lastTokenRef.current = null;
       }
     } catch (error) {
       console.error('Error getting token:', error);
-      localStorage.removeItem('authToken');
       setAuthToken(null);
-      lastTokenRef.current = null;
+      localStorage.removeItem('authToken');
     }
-    return null;
-  }, [user, session, getToken]);
+  }, [isLoaded, isSignedIn, session]);
 
-  // Initial token setup
   useEffect(() => {
-    if (isLoaded) {
-      const storedToken = localStorage.getItem('authToken');
-      if (storedToken) {
-        console.log('Loaded stored token on mount');
-        setAuthToken(storedToken);
-        lastTokenRef.current = storedToken;
-        // Verify the stored token
-        updateToken(true);
-      } else {
-        // No stored token, get a fresh one
-        updateToken(true);
-      }
-    }
-  }, [isLoaded, updateToken]);
+    const div = document.createElement('div');
+    div.dataset.userContext = 'true';
+    document.body.appendChild(div);
 
-  // Set up periodic refresh
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    console.log('Setting up token refresh interval');
-    const refreshInterval = setInterval(() => {
-      console.log('Token refresh interval triggered');
+    const handleRefreshToken = () => {
+      console.log('Token refresh requested');
       updateToken(true);
-    }, 1000 * 60 * 60); // Refresh every hour
+    };
+
+    div.addEventListener('refresh-token', handleRefreshToken);
 
     return () => {
-      console.log('Cleaning up token refresh interval');
-      clearInterval(refreshInterval);
+      div.removeEventListener('refresh-token', handleRefreshToken);
+      document.body.removeChild(div);
     };
-  }, [isLoaded, updateToken]);
+  }, [updateToken]);
 
-  if (!isLoaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-      </div>
-    );
-  }
+  const value = {
+    userId: user?.id ?? null,
+    token: lastTokenRef.current,
+    username: user?.username ?? null,
+    refreshToken: async () => {
+      await updateToken(true);
+    }
+  };
 
   return (
-    <UserContext.Provider value={{ 
-      userId: user?.id || '', 
-      token: lastTokenRef.current,
-      username: user?.username || user?.firstName || 'Anonymous',
-      refreshToken: () => updateToken(true)
-    }}>
+    <UserContext.Provider value={value}>
       {children}
     </UserContext.Provider>
   );
 };
 
-// Main hook for accessing user context
 export const useUser = () => {
   const context = useContext(UserContext);
   if (context === undefined) {

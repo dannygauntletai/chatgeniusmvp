@@ -141,7 +141,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   if (!activeChannel && !onSend && !threadParentId) return null;
 
   return (
-    <div className="border-t border-gray-600">
+    <div className="bg-gray-800 border-t border-gray-600">
       <form onSubmit={handleSubmit} className="p-4">
         <div className="flex space-x-2">
           <input
@@ -149,7 +149,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder={placeholder}
-            className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:border-primary bg-gray-900 text-white"
+            className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:border-white text-white"
             disabled={isSending}
           />
           <button

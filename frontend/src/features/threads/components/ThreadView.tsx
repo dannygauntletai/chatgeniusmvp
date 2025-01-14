@@ -56,7 +56,7 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ parentMessageId, parentM
           )}
         </div>
         <div className="flex-1 flex flex-col items-center justify-center space-y-3">
-          <p className="text-gray-400">Unable to load thread.</p>
+          <p className="text-gray-400">Unable to load thread</p>
           <button
             onClick={() => loadThreadMessages()}
             className="text-[#246FE0] hover:text-blue-400"
@@ -104,7 +104,7 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ parentMessageId, parentM
         </div>
       </div>
 
-      <div className="pb-4 border-t border-gray-700">
+      <div className="pb-4 border-t border-gray-600">
         <MessageInput onSend={handleSendReply} placeholder="Reply to thread..." />
       </div>
     </div>
