@@ -3,6 +3,12 @@ import multer from 'multer';
 import { FileController } from '../controllers/file.controller';
 import { DocumentController } from '../controllers/document.controller';
 import { requireAuth } from '../middleware/auth.middleware';
+import { Request } from 'express';
+
+// Add MulterRequest type
+interface MulterRequest extends Request {
+  file?: Express.Multer.File;
+}
 
 const router = Router();
 const fileController = new FileController();
@@ -16,11 +22,11 @@ const upload = multer({
 });
 
 // File upload endpoint
-router.post('/upload', requireAuth, upload.single('file'), (req, res) => {
+router.post('/upload', requireAuth, upload.single('file'), (req: MulterRequest, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
-  return fileController.uploadFile(req, res);
+  return fileController.uploadFile(req as MulterRequest, res);
 });
 
 // Get files for a channel

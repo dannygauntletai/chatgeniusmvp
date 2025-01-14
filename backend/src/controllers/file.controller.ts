@@ -4,6 +4,11 @@ import { v4 as uuidv4 } from 'uuid';
 import fetch from 'node-fetch';
 import { createClient } from '@supabase/supabase-js';
 
+// Update MulterRequest type
+interface MulterRequest extends Request {
+  file?: Express.Multer.File;
+}
+
 const prisma = new PrismaClient();
 const PUBLIC_BUCKET_NAME = 'Public Files';
 const DOCUMENT_SERVICE_URL = process.env.DOCUMENT_SERVICE_URL || 'http://localhost:8004';
@@ -60,7 +65,7 @@ export class FileController {
     return publicBucket;
   }
 
-  async uploadFile(req: Request, res: Response) {
+  async uploadFile(req: MulterRequest, res: Response) {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
