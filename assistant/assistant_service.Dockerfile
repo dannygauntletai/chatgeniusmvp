@@ -28,19 +28,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create all possible binary paths
-RUN mkdir -p /opt/render/project/src/assistant && \
-    mkdir -p /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053 && \
-    mkdir -p /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/node_modules/prisma
+# Create cache directory
+RUN mkdir -p /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053
 
 # Generate Prisma client and fetch query engine
 RUN cd prisma && \
     prisma generate && \
     prisma py fetch --platform debian-openssl-3.0.x && \
-    cp prisma-query-engine-* /opt/render/project/src/assistant/prisma-query-engine-debian-openssl-3.0.x && \
-    cp prisma-query-engine-* /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/prisma-query-engine-debian-openssl-3.0.x && \
-    cp prisma-query-engine-* /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/node_modules/prisma/query-engine-debian-openssl-3.0.x && \
-    chmod -R 777 /opt/render/project/src/assistant && \
+    mv prisma-query-engine-* /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/prisma-query-engine-debian-openssl-3.0.x && \
     chmod -R 777 /opt/render/.cache/prisma-python
 
 # Expose port
