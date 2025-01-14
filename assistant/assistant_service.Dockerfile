@@ -1,7 +1,7 @@
-# Use Python 3.9 as base image
-FROM python:3.9-slim
+# Use Python 3.11 as base image to match Render's runtime
+FROM python:3.11-slim
 
-# Set working directory to match Render's path
+# Set working directory
 WORKDIR /opt/render/project/src
 
 # Install system dependencies
@@ -25,14 +25,16 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy Prisma schema first
+COPY prisma ./prisma/
 
-# Generate Prisma client and fetch query engine
+# Generate Prisma client and fetch query engine for the correct platform
 RUN cd prisma && \
     prisma generate && \
-    prisma py fetch && \
-    chmod -R 777 /opt/render/project/src
+    prisma py fetch --platform debian-openssl-3.0.x
+
+# Copy remaining application code
+COPY . .
 
 # Expose port
 EXPOSE 8002
