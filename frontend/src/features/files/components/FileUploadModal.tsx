@@ -3,16 +3,19 @@ import { Modal } from '../../shared/components/Modal';
 import { useDropzone } from 'react-dropzone';
 import { fileService } from '../../../services/file.service';
 import { LoadingSpinner } from '../../shared/components/LoadingSpinner';
+import { useUser } from '@clerk/clerk-react';
 
 interface FileUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
+  channelId: string;
 }
 
-export const FileUploadModal = ({ isOpen, onClose }: FileUploadModalProps) => {
+export const FileUploadModal = ({ isOpen, onClose, channelId }: FileUploadModalProps) => {
   const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useUser();
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setFiles(prev => [...prev, ...acceptedFiles]);
@@ -39,12 +42,17 @@ export const FileUploadModal = ({ isOpen, onClose }: FileUploadModalProps) => {
       return;
     }
 
+    if (!user?.id) {
+      setError('Please sign in to upload files');
+      return;
+    }
+
     try {
       setIsUploading(true);
       setError(null);
       
       // Upload files one by one
-      await Promise.all(files.map(file => fileService.uploadFile(file)));
+      await Promise.all(files.map(file => fileService.uploadFile(file, channelId, user.id)));
       
       setFiles([]);
       onClose();

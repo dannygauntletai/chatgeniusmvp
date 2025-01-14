@@ -51,7 +51,7 @@ except Exception as e:
     # Continue anyway as the index might already exist
 
 # Initialize embeddings model
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 # Initialize chat model
 llm = ChatOpenAI(temperature=0.7, model_name="gpt-4")
@@ -233,37 +233,77 @@ async def retrieve_similar_messages(request: RetrieveRequest):
     index_name = "chatgenius-messages"
     
     try:
-        # Initialize vector store and retriever
+        # Initialize vector store
         vector_store = PineconeVectorStore(
             embedding=embeddings,
             index_name=index_name
         )
-        retriever = vector_store.as_retriever(
-            search_kwargs={"k": request.top_k}
-        )
         
-        # Get relevant documents
-        context = retriever.invoke(request.query)
+        # Get embeddings for the query
+        query_embedding = embeddings.embed_query(request.query)
+        
+        # Get the Pinecone index
+        index = pc.Index(index_name)
+        
+        # Search in both default and documents namespaces
+        results = []
+        
+        # Search in default namespace (chat messages)
+        chat_results = index.query(
+            vector=query_embedding,
+            top_k=request.top_k,
+            namespace=""  # default namespace
+        )
+        results.extend(chat_results.matches)
+        
+        # Search in documents namespace
+        doc_results = index.query(
+            vector=query_embedding,
+            top_k=request.top_k,
+            namespace="documents"
+        )
+        print("\n=== Document Search Results ===")
+        print(f"Found {len(doc_results.matches)} document matches")
+        for match in doc_results.matches:
+            print(f"\nScore: {match.score}")
+            print(f"Metadata: {match.metadata}")
+        print("==============================\n")
+        results.extend(doc_results.matches)
+        
+        # Sort all results by score and take top_k
+        results.sort(key=lambda x: x.score, reverse=True)
+        results = results[:request.top_k]
         
         # Filter results by threshold and prepare messages
         messages = []
         context_text = []
         
-        for doc in context:
-            score = doc.metadata.get("score", 0)
-            if score < request.threshold:
+        for result in results:
+            if result.score < request.threshold:
                 continue
                 
-            messages.append(Message(
-                message_id=doc.metadata["message_id"],
-                channel_name=doc.metadata["channel_name"],
-                sender_name=doc.metadata["sender_name"],
-                content=doc.metadata["content"],
-                created_at=doc.metadata["created_at"],
-                similarity=score
-            ))
-            
-            context_text.append(doc.page_content)
+            # Handle both message and document metadata formats
+            metadata = result.metadata
+            if "file_name" in metadata:  # Document chunk
+                messages.append(Message(
+                    message_id=metadata.get("file_id", ""),
+                    channel_name="Document",
+                    sender_name=metadata.get("file_name", ""),
+                    content=match.metadata.get("page_content", ""),
+                    created_at=metadata.get("created_at", ""),
+                    similarity=result.score
+                ))
+                context_text.append(f"From document '{metadata.get('file_name')}': {match.metadata.get('page_content', '')}")
+            else:  # Chat message
+                messages.append(Message(
+                    message_id=metadata.get("message_id", ""),
+                    channel_name=metadata.get("channel_name", ""),
+                    sender_name=metadata.get("sender_name", ""),
+                    content=metadata.get("content", ""),
+                    created_at=metadata.get("created_at", ""),
+                    similarity=result.score
+                ))
+                context_text.append(metadata.get("content", ""))
         
         # Generate AI response using the context
         prompt_with_context = chat_prompt.invoke({

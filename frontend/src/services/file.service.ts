@@ -1,110 +1,69 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
-const BUCKET_NAME = 'chat-genius-files';
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Supabase URL and key must be defined in environment variables');
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-export interface FileObject {
-  id: string;
-  name: string;
-  type: string;
-  size: number;
-  url: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import { FileObject } from '../types/file';
 
 class FileService {
-  async listFiles(): Promise<FileObject[]> {
+  async listFiles(channelId: string): Promise<FileObject[]> {
     try {
-      const { data, error } = await supabase.storage
-        .from(BUCKET_NAME)
-        .list('uploads');
+      const response = await fetch(`/api/files/channel/${channelId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-      if (error) {
-        throw error;
+      if (!response.ok) {
+        throw new Error('Failed to fetch files');
       }
 
-      const files = await Promise.all(
-        data.map(async (file) => {
-          const { data: urlData } = supabase.storage
-            .from(BUCKET_NAME)
-            .getPublicUrl(`uploads/${file.name}`);
-
-          const originalName = file.name.replace(/^\d+-/, '').replace(/_/g, ' ');
-
-          return {
-            id: file.id,
-            name: originalName,
-            size: file.metadata?.size || 0,
-            type: file.metadata?.mimetype || 'application/octet-stream',
-            url: urlData.publicUrl,
-            createdAt: file.created_at,
-            updatedAt: file.updated_at || file.created_at,
-          };
-        })
-      );
-
-      return files.sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      const files = await response.json();
+      return files;
     } catch (error) {
       console.error('Error listing files:', error);
       throw error;
     }
   }
 
-  async uploadFile(file: File): Promise<FileObject> {
+  async uploadFile(file: File, channelId: string, userId: string): Promise<FileObject> {
     try {
-      const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const timestamp = Date.now();
-      const uniqueFileName = `${timestamp}-${safeFileName}`;
-      const filePath = `uploads/${uniqueFileName}`;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('channelId', channelId);
+      formData.append('userId', userId);
 
-      const { data, error } = await supabase.storage
-        .from(BUCKET_NAME)
-        .upload(filePath, file);
+      const response = await fetch('/api/files/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-      if (error) {
-        throw error;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload file');
       }
 
-      const { data: urlData } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(filePath);
-
-      return {
-        id: data.id,
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        url: urlData.publicUrl,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      const fileObject = await response.json();
+      return fileObject;
     } catch (error) {
       console.error('Error uploading file:', error);
       throw error;
     }
   }
 
-  async deleteFile(fileId: string): Promise<void> {
+  async getUserFiles(userId: string): Promise<FileObject[]> {
     try {
-      const { error } = await supabase.storage
-        .from(BUCKET_NAME)
-        .remove([`uploads/${fileId}`]);
+      const response = await fetch(`/api/files/user/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-      if (error) {
-        throw error;
+      if (!response.ok) {
+        throw new Error('Failed to fetch user files');
       }
+
+      const files = await response.json();
+      return files;
     } catch (error) {
-      console.error('Error deleting file:', error);
+      console.error('Error fetching user files:', error);
       throw error;
     }
   }

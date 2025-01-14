@@ -5,7 +5,7 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-py"
+  provider = "prisma-client-js"
 }
 
 model User {
@@ -23,6 +23,7 @@ model User {
   channels      Channel[]  @relation("ChannelMembers")
   ownedChannels Channel[]  @relation("ChannelOwner")
   Reaction      Reaction[]
+  files         File[]
 }
 
 model Channel {
@@ -36,6 +37,7 @@ model Channel {
   owner    User      @relation("ChannelOwner", fields: [ownerId], references: [id])
   members  User[]    @relation("ChannelMembers")
   messages Message[]
+  files    File[]
 }
 
 model Message {
@@ -65,4 +67,19 @@ model Reaction {
   message   Message @relation(fields: [messageId], references: [id])
 
   @@unique([userId, messageId, emoji])
+}
+
+model File {
+  id        String   @id @default(uuid())
+  name      String
+  url       String
+  type      String
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  channelId String
+  channel   Channel  @relation(fields: [channelId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
 }

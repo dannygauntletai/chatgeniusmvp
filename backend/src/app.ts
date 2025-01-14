@@ -11,6 +11,7 @@ import channelRoutes from './routes/channel.routes';
 import threadRoutes from './routes/thread.routes';
 import reactionRoutes from './routes/reaction.routes';
 import userRoutes from './routes/user.routes';
+import fileRoutes from './routes/file.routes';
 
 const app = express();
 const httpServer = createServer(app);
@@ -70,6 +71,7 @@ app.use('/api/messages', requireAuth, reactionRoutes);
 app.use('/api/channels', requireAuth, channelRoutes);
 app.use('/api/threads', requireAuth, threadRoutes);
 app.use('/api/users', requireAuth, userRoutes);
+app.use('/api/files', requireAuth, fileRoutes);
 
 // Error handling
 app.use(errorHandler);

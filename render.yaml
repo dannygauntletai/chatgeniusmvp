@@ -1,51 +1,106 @@
 services:
   - type: web
-    name: chatgenius-backend
-    env: node
-    buildCommand: cd backend && npm install && npx prisma generate && npm run build
-    startCommand: cd backend && npm start
+    name: vector-service
+    env: docker
+    dockerfilePath: ./assistant/vector_service.Dockerfile
     envVars:
-      - key: NODE_ENV
-        value: production
       - key: PORT
-        value: 8080
+        value: 8001
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL
         sync: false
-      - key: CLERK_SECRET_KEY
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_ENVIRONMENT
+        sync: false
+      - key: PINECONE_INDEX
         sync: false
       - key: FRONTEND_URL
+        value: https://chatgenius.fyi
+      - key: LANGCHAIN_API_KEY
         sync: false
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGCHAIN_PROJECT
+        value: "chatgenius"
 
   - type: web
-    name: chatgenius-frontend
-    env: static
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: ./frontend/dist
-    routes:
-      - type: rewrite
-        source: /sign-up
-        destination: /index.html
-      - type: rewrite
-        source: /sign-in
-        destination: /index.html
-      - type: rewrite
-        source: /dashboard/*
-        destination: /index.html
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: no-cache
+    name: assistant-service
+    env: docker
+    dockerfilePath: ./assistant/assistant_service.Dockerfile
     envVars:
-      - key: VITE_API_URL
-        value: https://chatgenius-backend.onrender.com
-      - key: VITE_WS_URL
-        value: wss://chatgenius-backend.onrender.com
-      - key: VITE_CLERK_PUBLISHABLE_KEY
+      - key: PORT
+        value: 8002
+      - key: DATABASE_URL
         sync: false
-      - key: VITE_CLERK_PROXY_URL
-        value: https://accounts.clerk.services 
+      - key: DIRECT_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: VECTOR_SERVICE_URL
+        value: https://vector-service.onrender.com
+      - key: PHONE_SERVICE_URL
+        value: https://phone-service.onrender.com
+      - key: DOCUMENT_SERVICE_URL
+        value: https://document-service.onrender.com
+      - key: FRONTEND_URL
+        value: https://chatgenius.fyi
+      - key: LANGCHAIN_API_KEY
+        sync: false
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGCHAIN_PROJECT
+        value: "chatgenius"
+
+  - type: web
+    name: phone-service
+    env: docker
+    dockerfilePath: ./assistant/phone_service.Dockerfile
+    envVars:
+      - key: PORT
+        value: 8003
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: FRONTEND_URL
+        value: https://chatgenius.fyi
+
+  - type: web
+    name: document-service
+    env: docker
+    dockerfilePath: ./assistant/document_service.Dockerfile
+    envVars:
+      - key: PORT
+        value: 8004
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_ENVIRONMENT
+        sync: false
+      - key: PINECONE_INDEX
+        sync: false
+      - key: FRONTEND_URL
+        value: https://chatgenius.fyi
+      - key: BACKEND_URL
+        value: https://chatgenius-backend.onrender.com
+      - key: LANGCHAIN_API_KEY
+        sync: false
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGCHAIN_PROJECT
+        value: "chatgenius" 
