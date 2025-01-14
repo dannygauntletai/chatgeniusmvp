@@ -1,7 +1,4 @@
-import { FileObject } from '../types/file';
-import { api } from './api.service';
-
-export type { FileObject };
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 interface FileObject {
   id: string;
@@ -24,10 +21,12 @@ interface FileObject {
   };
 }
 
+export type { FileObject };
+
 class FileService {
   async listFiles(channelId: string): Promise<FileObject[]> {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/files/channel/${channelId}`, {
+      const response = await fetch(`${API_URL}/files/channel/${channelId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         }
@@ -51,7 +50,7 @@ class FileService {
       formData.append('channelId', channelId);
       formData.append('userId', userId);
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/files/upload`, {
+      const response = await fetch(`${API_URL}/files/upload`, {
         method: 'POST',
         body: formData,
         headers: {
@@ -73,7 +72,7 @@ class FileService {
 
   async getUserFiles(userId: string): Promise<FileObject[]> {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/files/user/${userId}`, {
+      const response = await fetch(`${API_URL}/files/user/${userId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`
         }
