@@ -53,6 +53,7 @@ async def extract_call_info(request: ExtractCallRequest):
     """Extract call details from a natural language message."""
     try:
         details = await extract_call_details(request.message, request.context)
+        print(details)
         if not details:
             return {"is_call_request": False}
             
@@ -63,6 +64,7 @@ async def extract_call_info(request: ExtractCallRequest):
         }
         
     except Exception as e:
+        print(e)
         print(f"Error in extract_call_info: {str(e)}")
         raise HTTPException(
             status_code=500,
@@ -119,27 +121,37 @@ async def get_call_status(call_sid: str):
 # Helper functions
 async def extract_call_details(message: str, context: Optional[str] = None) -> Optional[Dict]:
     """Extract phone number and message from natural language request."""
-    system_prompt = """You are a helpful assistant that extracts phone call details from natural language requests.
-    If the message contains a request to make a phone call, return a JSON with:
-    - phone_number: the phone number to call
-    - message: what should be said in the call, incorporating any relevant context about user preferences or history
-    If it's not a call request, return null.
-    
-    When generating the message:
-    - Include relevant preferences or context from previous messages
-    - Keep the message natural and conversational
-    - Be specific about any preferences mentioned
-    - Keep it concise but complete
-    
-    Examples:
-    Input: "call 123-456-7890 and tell them hello"
-    Context: None
-    Output: {"phone_number": "123-456-7890", "message": "hello"}
-    
-    Input: "can you call +1-555-0123 to order a pizza with my preferences"
-    Context: "User mentioned: I like pepperoni and extra cheese. No mushrooms please."
-    Output: {"phone_number": "+1-555-0123", "message": "I would like to order a pizza with pepperoni and extra cheese, but no mushrooms please."}
+    system_prompt = """You are a phone call assistant that MUST extract phone numbers and messages from requests.
+
+    CRITICAL RULES:
+    1. ANY message containing a phone number should be treated as a call request
+    2. If you see a number that looks like a phone number, treat it as one
+    3. The command can be in ANY format: "call", "@assistant call", "dial", "phone", etc.
+    4. ALWAYS return a response if there's a number that could be a phone number
+
+    For the phone number:
+    - Remove any spaces, parentheses, or extra characters
+    - Ensure it starts with + and country code
+    - Convert formats like (862) 237-4016 to +18622374016
+
+    Return JSON format:
+    {
+        "phone_number": "normalized number with +1 prefix",
+        "message": "clear, concise message for the call"
+    }
+
+    Example inputs that MUST be detected:
+    - @assistant call +18622374016 with my favorite pizza topping
+    - call 862-237-4016 to order food
+    - dial (862) 237 4016
+    - +18622374016 tell them I'll be late
+    - 8622374016 order pizza
     """
+    
+    # Clean up the input message
+    message = message.strip()
+    if message.startswith("@assistant"):
+        message = message.replace("@assistant", "").strip()
     
     messages = [
         SystemMessage(content=system_prompt),
@@ -149,13 +161,34 @@ async def extract_call_details(message: str, context: Optional[str] = None) -> O
     
     try:
         response = await chat.ainvoke(messages)
+        print(f"Input message: {message}")  # Debug print
         print(f"LLM Response: {response.content}")  # Debug print
         
+        # Handle null responses
         if "null" in response.content.lower():
             return None
             
+        # Parse the JSON response
         import json
-        return json.loads(response.content)
+        result = json.loads(response.content)
+        
+        # Normalize phone number
+        if "phone_number" in result:
+            # Remove any non-digit characters except +
+            number = ''.join(c for c in result["phone_number"] if c.isdigit() or c == '+')
+            
+            # Add proper formatting
+            if not number.startswith('+'):
+                if number.startswith('1'):
+                    number = '+' + number
+                else:
+                    number = '+1' + number
+            
+            result["phone_number"] = number
+            
+        print(f"Normalized result: {result}")  # Debug print
+        return result
+        
     except Exception as e:
         print(f"Error in extract_call_details: {str(e)}")  # Debug print
         return None

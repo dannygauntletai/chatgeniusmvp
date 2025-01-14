@@ -218,69 +218,18 @@ async def get_assistant_response(request: AssistantRequest):
             
             if not channel or not user:
                 raise HTTPException(status_code=404, detail="Channel or user not found")
-            
-            # Get recent messages for context
-            recent_messages = await prisma.message.find_many(
-                where={
-                    "channelId": channel.id,
-                    "NOT": {
-                        "content": {
-                            "contains": "@assistant"
-                        }
-                    }
-                },
-                include={
-                    "user": True,
-                    "thread": True
-                },
-                order={
-                    "createdAt": "desc"
-                },
-                take=10
+
+            # Get similar messages and documents with higher limits for documents
+            similar = await vector_client.retrieve_similar(
+                query=request.message,
+                user_id=request.user_id,
+                channel_id=request.channel_id,
+                channel_type="private" if channel.isPrivate else "public",
+                top_k=5,  # Increased to get more potential matches
+                threshold=0.15  # Lower threshold for more lenient matching
             )
             
-            # Build context for call requests
-            call_context = ""
-            if recent_messages:
-                relevant_messages = []
-                for msg in reversed(recent_messages):  # Process in chronological order
-                    if msg.user and msg.user.id == request.user_id:
-                        # Only include messages that might contain preferences or relevant info
-                        if any(keyword in msg.content.lower() for keyword in ["like", "prefer", "want", "need", "allerg", "no ", "don't"]):
-                            relevant_messages.append(f"User mentioned: {msg.content}")
-                call_context = "\n".join(relevant_messages)
-            
-            # Check if this is a call request
-            try:
-                print(f"Processing potential call request: {request.message}")  # Debug print
-                print(f"Call context: {call_context}")  # Debug print
-                
-                is_call, call_details = await phone_client.extract_call_details(request.message, call_context)
-                print(f"Call extraction result - is_call: {is_call}, details: {call_details}")  # Debug print
-                
-                if is_call and call_details:
-                    try:
-                        call_result = await phone_client.make_call(
-                            call_details["phone_number"], 
-                            call_details["message"]
-                        )
-                        return {
-                            "response": f"I've initiated a call to {call_details['phone_number']}. I'll say: '{call_details['message']}'\n\nCall status: {call_result['status']}",
-                            "context_used": [],
-                            "confidence": 1.0
-                        }
-                    except Exception as e:
-                        print(f"Error making call: {str(e)}")  # Debug print
-                        return {
-                            "response": f"I wasn't able to make the call: {str(e)}",
-                            "context_used": [],
-                            "confidence": 1.0
-                        }
-            except Exception as e:
-                print(f"Error processing call request: {str(e)}")  # Debug print
-                # Continue with normal message processing if call extraction fails
-            
-            # Build context string for chat
+            # Build context string
             context = ""
             
             # Add channel context
@@ -296,8 +245,27 @@ async def get_assistant_response(request: AssistantRequest):
             # Add user context
             if user:
                 context += f"\nCurrent user: {user.username}"
-            
-            # Get recent channel messages for context
+
+            if similar:
+                # Separate and prioritize document content
+                doc_messages = [msg for msg in similar if "Document:" in msg.channel_name]
+                chat_messages = [msg for msg in similar if "Document:" not in msg.channel_name]
+                
+                # Add document context first and more prominently
+                if doc_messages:
+                    context += "\n\nRELEVANT DOCUMENT CONTENT:\n"
+                    for msg in doc_messages:
+                        # Extract document name for better reference
+                        doc_name = msg.channel_name.replace("Document:", "").strip()
+                        context += f"\n=== From {doc_name} ===\n{msg.content}\n"
+                
+                # Add chat context separately
+                if chat_messages:
+                    context += "\n\nChat History:\n"
+                    for msg in chat_messages[:5]:  # Limit chat context
+                        context += f"{msg.sender_name}: {msg.content}\n"
+
+            # Get recent messages for context
             recent_messages = await prisma.message.find_many(
                 where={
                     "channelId": channel.id,
@@ -326,41 +294,53 @@ async def get_assistant_response(request: AssistantRequest):
                     if msg.user:
                         context += f"\n{msg.user.username}: {msg.content}{thread_info}"
             
-            # Get similar messages
-            similar = await vector_client.retrieve_similar(
-                query=request.message,
-                user_id=request.user_id,
-                channel_id=request.channel_id,
-                channel_type="private" if channel.isPrivate else "public",
-                top_k=5,
-                threshold=0.3
-            )
-            
-            if similar:
-                context += "\n\nRelevant message history:\n"
-                for msg in similar:
-                    context += f"{msg.sender_name}: {msg.content}\n"
-                
-            # Prepare messages for chat completion
+            # Prepare messages for chat completion with document emphasis
             messages = [
-                SystemMessage(content=f"""You are a helpful assistant in a chat application.
+                SystemMessage(content=f"""You are a helpful assistant in a chat application with access to uploaded documents and the ability to make phone calls.
                     Current context:
                     {context}
                     
-                    You can help users make phone calls by understanding natural language requests.
-                    Examples:
-                    - "Can you call the pizza place at +1-555-0123?"
-                    - "Please contact 123-456-7890 and order some food"
-                    - "Make a reservation by calling +1-999-8888"
+                    IMPORTANT INSTRUCTIONS:
+                    1. For document-related queries, check document content first
+                    2. For action requests (like making calls), process them directly without checking documents
+                    3. When using document content, cite it explicitly: "According to [document name]: [quote]"
+                    4. Balance between using document knowledge and taking direct actions
+                    5. For phone calls, process them immediately without document checks
+                    6. When a phone number is mentioned, remember and reference it in future responses
+                    7. If asked about a previously mentioned number, provide it and offer to make a call
                     
-                    Respond naturally and conversationally while using the context to inform your responses.
-                    Keep responses concise but informative."""),
+                    PHONE NUMBER HANDLING:
+                    - If a message contains a phone number, store it with its context (e.g., "pizza shop: +18622374016")
+                    - If asked about a previously mentioned number, include it in your response
+                    - Always offer to make a call when mentioning a stored number
+                    
+                    Respond naturally and conversationally while maintaining this balance."""),
                 HumanMessage(content=request.message)
             ]
             
             # Get chat completion
             chat = ChatOpenAI(temperature=0.7)
             response = await chat.ainvoke(messages)
+            
+            # Only check for call request if no document content was found
+            if not any("Document:" in msg.channel_name for msg in similar):
+                try:
+                    is_call, call_details = await phone_client.extract_call_details(request.message, "")
+                    if is_call and call_details:
+                        try:
+                            call_result = await phone_client.make_call(
+                                call_details["phone_number"], 
+                                call_details["message"]
+                            )
+                            return {
+                                "response": f"I've initiated a call to {call_details['phone_number']}. I'll say: '{call_details['message']}'\n\nCall status: {call_result['status']}",
+                                "context_used": [],
+                                "confidence": 1.0
+                            }
+                        except Exception as e:
+                            print(f"Error making call: {str(e)}")
+                except Exception as e:
+                    print(f"Error processing call request: {str(e)}")
             
             return {
                 "response": response.content,

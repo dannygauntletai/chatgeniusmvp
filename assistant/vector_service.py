@@ -37,7 +37,7 @@ pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 
 # Initialize LangChain components
 embeddings = OpenAIEmbeddings(
-    model="text-embedding-3-small",
+    model="text-embedding-3-large",
     openai_api_key=os.getenv("OPENAI_API_KEY")
 )
 
@@ -60,7 +60,7 @@ async def initialize_vector_db():
         try:
             pc.create_index(
                 name="chatgenius-messages",
-                dimension=1536,  # text-embedding-3-small dimension
+                dimension=3072,  # text-embedding-3-large dimension
                 spec=ServerlessSpec(
                     cloud="aws",
                     region="us-east-1"
@@ -196,35 +196,76 @@ async def retrieve_similar_messages(request: RetrieveRequest):
                     "channel_type": "public"
                 }
             
-            # Initialize vector store
-            vector_store = PineconeVectorStore(
+            # Initialize vector store for chat messages
+            chat_vector_store = PineconeVectorStore(
                 index_name="chatgenius-messages",
                 embedding=embeddings,
                 pinecone_api_key=os.getenv("PINECONE_API_KEY")
             )
             
-            # Perform similarity search
-            docs_and_scores = vector_store.similarity_search_with_score(
+            # Initialize vector store for documents
+            doc_vector_store = PineconeVectorStore(
+                index_name="chatgenius-messages",
+                embedding=embeddings,
+                pinecone_api_key=os.getenv("PINECONE_API_KEY"),
+                namespace="documents"
+            )
+            
+            # Perform similarity search on chat messages
+            chat_docs_and_scores = chat_vector_store.similarity_search_with_score(
                 request.query,
                 k=request.top_k,
                 filter=filter_dict
             )
+
+            # Perform similarity search on documents with lower threshold
+            doc_docs_and_scores = doc_vector_store.similarity_search_with_score(
+                request.query,
+                k=request.top_k,
+                filter={"source_type": "document"}  # Only get document chunks
+            )
+
+            print("Chat results:", chat_docs_and_scores)
+            print("Document results:", doc_docs_and_scores)
+            
+            # Combine and sort all results by score
+            all_docs_and_scores = chat_docs_and_scores + doc_docs_and_scores
+            all_docs_and_scores.sort(key=lambda x: x[1], reverse=True)
             
             # Format results
             messages = []
-            for doc, score in docs_and_scores:
-                if score < request.threshold:
+            for doc, score in all_docs_and_scores:
+                print(f"Processing doc with score {score}: {doc.metadata}")
+                # Use a much lower threshold for document results
+                doc_threshold = request.threshold * 0.5 if doc.metadata.get("source_type") == "document" else request.threshold
+                if score < doc_threshold:
                     continue
+                
+                # Get content from metadata fields, with fallback chain
+                content = (
+                    doc.metadata.get("content") or 
+                    doc.metadata.get("text") or 
+                    doc.metadata.get("page_content") or 
+                    doc.page_content
+                )
+                
+                # For document chunks, add rich context
+                if doc.metadata.get("source_type") == "document":
+                    file_name = doc.metadata.get("file_name", "Unknown document")
+                    page = doc.metadata.get("page_number", "unknown")
+                    chunk_index = doc.metadata.get("chunk_index", 0)
+                    total_chunks = doc.metadata.get("total_chunks", 1)
+                    content = f"[Source: {file_name} (Page {page}, Section {chunk_index + 1}/{total_chunks})]\n{content}"
                 
                 messages.append(Message(
                     message_id=doc.metadata["message_id"],
                     channel_name=doc.metadata["channel_name"],
                     sender_name=doc.metadata["sender_name"],
-                    content=doc.page_content,
+                    content=content,
                     similarity=score
                 ))
-            
-            print(f"Returning {len(messages)} messages")
+                
+            print(f"Returning {len(messages)} messages with scores ranging from {messages[0].similarity if messages else 0} to {messages[-1].similarity if messages else 0}")
             return RetrieveResponse(
                 query=request.query,
                 messages=messages

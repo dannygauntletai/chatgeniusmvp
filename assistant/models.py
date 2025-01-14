@@ -19,7 +19,7 @@ class AssistantRequest(BaseModel):
 
 class AssistantResponse(BaseModel):
     response: str
-    context_used: List[str]
+    context_used: List[Message]
     confidence: float
 
 class InitializeResponse(BaseModel):
