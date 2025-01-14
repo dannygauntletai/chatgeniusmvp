@@ -1,23 +1,12 @@
 import { FileObject } from '../types/file';
+import { api } from './api.service';
 
 export type { FileObject };
 
 class FileService {
   async listFiles(channelId: string): Promise<FileObject[]> {
     try {
-      const response = await fetch(`/api/files/channel/${channelId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch files');
-      }
-
-      const files = await response.json();
-      return files;
+      return await api.get<FileObject[]>(`/files/channel/${channelId}`);
     } catch (error) {
       console.error('Error listing files:', error);
       throw error;
@@ -31,9 +20,12 @@ class FileService {
       formData.append('channelId', channelId);
       formData.append('userId', userId);
 
-      const response = await fetch('/api/files/upload', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/files/upload`, {
         method: 'POST',
         body: formData,
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
       });
 
       if (!response.ok) {
@@ -51,19 +43,7 @@ class FileService {
 
   async getUserFiles(userId: string): Promise<FileObject[]> {
     try {
-      const response = await fetch(`/api/files/user/${userId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch user files');
-      }
-
-      const files = await response.json();
-      return files;
+      return await api.get<FileObject[]>(`/files/user/${userId}`);
     } catch (error) {
       console.error('Error fetching user files:', error);
       throw error;
