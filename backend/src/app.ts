@@ -32,7 +32,7 @@ console.log('Allowed origins:', allowedOrigins);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: true,
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
@@ -47,18 +47,34 @@ initializeSocket(io);
 
 // Middleware
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      console.log('Request with no origin');
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      console.log('Allowed origin:', origin);
+      callback(null, true);
+    } else {
+      console.log('Blocked origin:', origin);
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   exposedHeaders: ['Content-Length', 'Content-Type'],
   maxAge: 86400,
-  optionsSuccessStatus: 204,
-  preflightContinue: false
+  optionsSuccessStatus: 204
 }));
 
 // Add error handling for CORS preflight
-app.options('*', cors());
+app.options('*', (req, res, next) => {
+  console.log('Handling OPTIONS request from:', req.get('origin'));
+  cors()(req, res, next);
+});
 
 app.use(express.json());
 
