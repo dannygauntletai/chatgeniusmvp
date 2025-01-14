@@ -1,4 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+import { api } from './api.service';
+import { API_URL } from '../config';
 
 interface FileObject {
   id: string;
@@ -26,17 +27,7 @@ export type { FileObject };
 class FileService {
   async listFiles(channelId: string): Promise<FileObject[]> {
     try {
-      const response = await fetch(`${API_URL}/files/channel/${channelId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to list files');
-      }
-
-      return await response.json();
+      return await api.get<FileObject[]>(`/files/channel/${channelId}`);
     } catch (error) {
       console.error('Error listing files:', error);
       throw error;
@@ -72,17 +63,7 @@ class FileService {
 
   async getUserFiles(userId: string): Promise<FileObject[]> {
     try {
-      const response = await fetch(`${API_URL}/files/user/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch user files');
-      }
-
-      return await response.json();
+      return await api.get<FileObject[]>(`/files/user/${userId}`);
     } catch (error) {
       console.error('Error fetching user files:', error);
       throw error;
