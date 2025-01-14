@@ -30,7 +30,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const { userId, username } = useUserContext();
 
   const handleAssistantMention = async (type: string, query: string) => {
-    if (type === 'assistant' && activeChannel) {
+    if (type === 'assistant' && activeChannel && userId) {
       try {
         const response = await AssistantService.getResponse(
           query,
@@ -85,7 +85,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() || isSending) return;
+    if (!content.trim() || isSending || !activeChannel || !userId || !username) return;
 
     const trimmedContent = content.trim();
     setIsSending(true);
@@ -97,12 +97,12 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       content: trimmedContent,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      userId,
-      channelId: activeChannel?.id || '',
-      threadId: threadParentId,
+      userId: userId as string,
+      channelId: activeChannel.id,
+      threadId: threadParentId || undefined,
       user: {
-        id: userId,
-        username
+        id: userId as string,
+        username: username as string
       },
       reactions: {}
     };
@@ -119,16 +119,17 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           content: trimmedContent,
           threadId: threadParentId,
         });
-      } else if (activeChannel) {
+      } else {
         await MessageService.createMessage({
           content: trimmedContent,
           channelId: activeChannel.id,
         });
       }
 
-      // If this is an @assistant mention, get and send the assistant's response
-      if (trimmedContent.includes('@assistant')) {
-        const query = trimmedContent.replace('@assistant', '').trim();
+      // If this is a DM with the assistant or contains @assistant mention, get the assistant's response
+      const isDMWithAssistant = activeChannel.isPrivate && activeChannel.members?.some(member => member.id === ASSISTANT_BOT_USER_ID);
+      if (isDMWithAssistant || trimmedContent.includes('@assistant')) {
+        const query = trimmedContent.replace(/@assistant/g, '').trim();
         await handleAssistantMention('assistant', query);
       }
     } catch (error) {
