@@ -1,7 +1,8 @@
+from langchain_openai import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Pinecone
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
-from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_pinecone import PineconeVectorStore
+from langchain_community.document_loaders.pdf import PyPDFLoader
+from langchain_community.document_loaders.text import TextLoader
 import tempfile
 import os
 from dotenv import load_dotenv
