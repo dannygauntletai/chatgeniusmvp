@@ -20,6 +20,10 @@ const httpServer = createServer(app);
 const allowedOrigins = [
   'http://localhost:3000',
   'https://chatgenius.fyi',
+  'https://chatgeniusmvp.onrender.com',
+  'https://chatgeniusmvp-vector.onrender.com',
+  'https://chatgeniusmvp-document.onrender.com',
+  'https://chatgeniusmvp-phone.onrender.com',
   'https://chatgeniusmvp-backend.onrender.com',
   process.env.FRONTEND_URL
 ].filter((origin): origin is string => Boolean(origin));

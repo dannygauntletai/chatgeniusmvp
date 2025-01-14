@@ -3,7 +3,7 @@ import { AuthenticatedRequest } from '../types/request.types';
 import { prisma } from '../utils/prisma';
 import { io } from '../app';
 
-const PUBLIC_BUCKET_NAME = 'public-files';
+const PUBLIC_BUCKET_NAME = 'Public Files';
 
 export class ChannelController {
   static async createChannel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
