@@ -12,6 +12,7 @@ import aiohttp
 from pinecone import Pinecone, ServerlessSpec
 from langsmith import Client
 from langchain_core.tracers.context import tracing_v2_enabled
+from prisma import Prisma
 
 # Load environment variables
 load_dotenv()
@@ -58,6 +59,9 @@ text_splitter = RecursiveCharacterTextSplitter(
     length_function=len,
     separators=["\n\n", "\n", " ", ""]  # Try to split on paragraph breaks first
 )
+
+# Initialize Prisma client with connection handling
+prisma = Prisma(auto_register=True)
 
 async def download_file(url: str, file_type: str) -> str:
     """Download a file from a URL and save it temporarily."""

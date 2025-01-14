@@ -48,8 +48,8 @@ embeddings = OpenAIEmbeddings(
     openai_api_key=os.getenv("OPENAI_API_KEY")
 )
 
-# Initialize Prisma client
-prisma = Prisma()
+# Initialize Prisma client with connection handling
+prisma = Prisma(auto_register=True)
 
 @app.post("/initialize", response_model=InitializeResponse)
 async def initialize_vector_db():
