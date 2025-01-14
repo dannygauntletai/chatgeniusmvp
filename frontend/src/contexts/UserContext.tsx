@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useEffect } from 'react';
+import { createContext, useContext, ReactNode, useEffect, useCallback, useRef } from 'react';
 import { useUser as useClerkUser, useAuth, useSession } from '@clerk/clerk-react';
 import { setAuthToken } from '../services/api.service';
 
@@ -6,6 +6,7 @@ interface UserContextType {
   userId: string;
   token: string | null;
   username: string;
+  refreshToken: () => Promise<string | null>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -14,58 +15,80 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const { user, isLoaded } = useClerkUser();
   const { getToken } = useAuth();
   const { session } = useSession();
+  const lastTokenRef = useRef<string | null>(null);
 
-  // Load token from localStorage on mount
-  useEffect(() => {
-    const storedToken = localStorage.getItem('authToken');
-    if (storedToken) {
-      console.log('Loaded stored token on mount');
-      setAuthToken(storedToken);
+  const updateToken = useCallback(async (force: boolean = false) => {
+    if (!user || !session) {
+      console.log('No user or session, clearing token');
+      localStorage.removeItem('authToken');
+      setAuthToken(null);
+      lastTokenRef.current = null;
+      return null;
     }
-  }, []);
 
-  useEffect(() => {
-    const updateToken = async () => {
-      if (user && session) {
-        try {
-          console.log('Updating token for user:', user.id);
-          // Get a fresh session token that lasts 7 days
-          const token = await getToken();
-          if (token) {
-            console.log('Got new token from Clerk');
-            localStorage.setItem('authToken', token);
-            setAuthToken(token);
-          } else {
-            console.warn('No token received from Clerk');
-            localStorage.removeItem('authToken');
-            setAuthToken(null);
-          }
-        } catch (error) {
-          console.error('Error getting token:', error);
-          localStorage.removeItem('authToken');
-          setAuthToken(null);
-        }
-      } else {
-        console.log('No user or session, clearing token');
+    try {
+      // Only update if forced or token has changed
+      const currentToken = localStorage.getItem('authToken');
+      if (!force && currentToken && currentToken === lastTokenRef.current) {
+        console.log('Token is still valid, skipping update');
+        return currentToken;
+      }
+
+      console.log('Updating token for user:', user.id);
+      const token = await getToken();
+      if (token && token !== lastTokenRef.current) {
+        console.log('Got new token from Clerk');
+        localStorage.setItem('authToken', token);
+        setAuthToken(token);
+        lastTokenRef.current = token;
+        return token;
+      } else if (!token) {
+        console.warn('No token received from Clerk');
         localStorage.removeItem('authToken');
         setAuthToken(null);
+        lastTokenRef.current = null;
       }
-    };
+    } catch (error) {
+      console.error('Error getting token:', error);
+      localStorage.removeItem('authToken');
+      setAuthToken(null);
+      lastTokenRef.current = null;
+    }
+    return null;
+  }, [user, session, getToken]);
 
-    console.log('Setting up token management');
-    updateToken();
+  // Initial token setup
+  useEffect(() => {
+    if (isLoaded) {
+      const storedToken = localStorage.getItem('authToken');
+      if (storedToken) {
+        console.log('Loaded stored token on mount');
+        setAuthToken(storedToken);
+        lastTokenRef.current = storedToken;
+        // Verify the stored token
+        updateToken(true);
+      } else {
+        // No stored token, get a fresh one
+        updateToken(true);
+      }
+    }
+  }, [isLoaded, updateToken]);
 
-    // Refresh token every 6 days to ensure we always have a valid token
+  // Set up periodic refresh
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    console.log('Setting up token refresh interval');
     const refreshInterval = setInterval(() => {
-      console.log('Token refresh triggered');
-      updateToken();
-    }, 1000 * 60 * 60 * 24 * 6); // Refresh every 6 days
+      console.log('Token refresh interval triggered');
+      updateToken(true);
+    }, 1000 * 60 * 60); // Refresh every hour
 
     return () => {
-      console.log('Cleaning up token management');
+      console.log('Cleaning up token refresh interval');
       clearInterval(refreshInterval);
     };
-  }, [user, session, getToken]);
+  }, [isLoaded, updateToken]);
 
   if (!isLoaded) {
     return (
@@ -75,13 +98,12 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     );
   }
 
-  const storedToken = localStorage.getItem('authToken');
-
   return (
     <UserContext.Provider value={{ 
       userId: user?.id || '', 
-      token: storedToken,
-      username: user?.username || user?.firstName || 'Anonymous'
+      token: lastTokenRef.current,
+      username: user?.username || user?.firstName || 'Anonymous',
+      refreshToken: () => updateToken(true)
     }}>
       {children}
     </UserContext.Provider>
