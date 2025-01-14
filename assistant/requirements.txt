@@ -9,3 +9,4 @@ langchain-openai>=0.0.5
 langchain-pinecone>=0.0.3
 langchain-core>=0.1.18
 langchain-community>=0.0.16
+twilio>=8.10.0
