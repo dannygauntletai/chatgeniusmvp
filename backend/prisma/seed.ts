@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   // Create assistant bot user if it doesn't exist
-  const assistantBotId = process.env.ASSISTANT_BOT_USER_ID!;
+  const assistantBotId = 'assistant-bot';
   const existingBot = await prisma.user.findUnique({
     where: { id: assistantBotId }
   });
@@ -17,7 +17,8 @@ async function main() {
         username: 'Assistant',
         email: 'assistant@chatgenius.ai',
         password: await hash('', 10), // Empty password hash
-        avatarUrl: '/assistant-avatar.png'
+        avatarUrl: '/assistant-avatar.png',
+        status: 'online'
       }
     });
   }

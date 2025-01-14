@@ -126,6 +126,7 @@ export class FileController {
         id: uuidv4(),
         name: req.file.originalname,
         type: req.file.mimetype,
+        size: req.file.size,
         url: publicUrl,
         channelId: targetChannelId,
         userId: userId
