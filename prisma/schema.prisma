@@ -10,7 +10,8 @@ generator client {
 
 generator py {
   provider = "prisma-client-py"
-  interface = "sync"
+  interface = "asyncio"
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
 }
 
 model User {
