@@ -61,7 +61,10 @@ text_splitter = RecursiveCharacterTextSplitter(
 )
 
 # Initialize Prisma client with connection handling
-prisma = Prisma(auto_register=True)
+prisma = Prisma(
+    auto_register=True,
+    binary_path="/opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/prisma-query-engine-debian-openssl-3.0.x"
+)
 
 async def download_file(url: str, file_type: str) -> str:
     """Download a file from a URL and save it temporarily."""
