@@ -50,14 +50,33 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
 
   useEffect(() => {
     const loadReactions = async () => {
-      try {
-        const reactions = await MessageService.getReactions(message.id);
-        setMessage(prevMessage => ({
-          ...prevMessage,
-          reactions: reactions || {}
-        }));
-      } catch (error) {
-        console.error('Failed to load reactions:', error);
+      if (message.id.startsWith('temp-')) {
+        return;
+      }
+
+      let retryCount = 0;
+      const maxRetries = 3;
+      const retryDelay = 1000; // 1 second
+
+      while (retryCount < maxRetries) {
+        try {
+          const reactions = await MessageService.getReactions(message.id);
+          setMessage(prevMessage => ({
+            ...prevMessage,
+            reactions: reactions || {}
+          }));
+          break; // Success, exit the retry loop
+        } catch (error: any) {
+          console.error('Failed to load reactions:', error);
+          
+          if (error.status === 401 && retryCount < maxRetries - 1) {
+            console.log(`Retrying reaction load (${retryCount + 1}/${maxRetries})...`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            retryCount++;
+          } else {
+            break;
+          }
+        }
       }
     };
 

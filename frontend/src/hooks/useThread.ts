@@ -89,6 +89,19 @@ export const useThread = (messageId?: string, shouldLoad: boolean = false, initi
         setState(prev => {
           if (!prev.activeThread) return prev;
           
+          // Only check for duplicates if this message is from the current user
+          if (message.userId === userId) {
+            // Check if we already have a temporary message with this content
+            const hasTempMessage = prev.activeThread.replies.some(
+              reply => reply.content === message.content && reply.id.startsWith('temp-')
+            );
+
+            // If we have a temp message, don't add the real one yet - it will be replaced
+            if (hasTempMessage) {
+              return prev;
+            }
+          }
+
           const newReplies = [...prev.activeThread.replies, message];
           return {
             ...prev,
