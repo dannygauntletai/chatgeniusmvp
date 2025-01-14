@@ -25,24 +25,14 @@ COPY vector_requirements.txt requirements.txt
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy Prisma schema first
-COPY prisma ./prisma/
-
-# Generate Prisma client and fetch query engine
-WORKDIR /opt/render/project/src/prisma
-RUN prisma generate && \
-    prisma py fetch && \
-    chmod +x prisma-query-engine-* && \
-    mv prisma-query-engine-* ../assistant/prisma-query-engine-debian-openssl-3.0.x && \
-    cd .. && \
-    chmod -R 777 .
-
-# Reset working directory and copy remaining code
-WORKDIR /opt/render/project/src
+# Copy application code
 COPY . .
 
-# Ensure the query engine is executable
-RUN chmod +x assistant/prisma-query-engine-*
+# Generate Prisma client and fetch query engine
+RUN cd prisma && \
+    prisma generate && \
+    prisma py fetch && \
+    chmod -R 777 /opt/render/project/src
 
 # Expose port
 EXPOSE 8003
