@@ -1,8 +1,8 @@
 # Use Python 3.9 as base image
 FROM python:3.9-slim
 
-# Set working directory
-WORKDIR /app
+# Set working directory to match Render's path
+WORKDIR /opt/render/project/src
 
 # Install system dependencies
 RUN apt-get update && \
@@ -29,20 +29,20 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY prisma ./prisma/
 
 # Generate Prisma client and fetch query engine
-WORKDIR /app/prisma
+WORKDIR /opt/render/project/src/prisma
 RUN prisma generate && \
     prisma py fetch && \
     chmod +x prisma-query-engine-* && \
-    mv prisma-query-engine-* ../prisma-query-engine-debian-openssl-3.0.x && \
+    mv prisma-query-engine-* ../assistant/prisma-query-engine-debian-openssl-3.0.x && \
     cd .. && \
     chmod -R 777 .
 
 # Reset working directory and copy remaining code
-WORKDIR /app
+WORKDIR /opt/render/project/src
 COPY . .
 
 # Ensure the query engine is executable
-RUN chmod +x prisma-query-engine-*
+RUN chmod +x assistant/prisma-query-engine-*
 
 # Expose port
 EXPOSE 8003
