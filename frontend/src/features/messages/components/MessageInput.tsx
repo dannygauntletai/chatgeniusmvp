@@ -6,6 +6,9 @@ import { useUserContext } from '../../../contexts/UserContext';
 import { socket } from '../../../services/socket.service';
 import { Message } from '../types/message.types';
 
+// Get assistant bot ID from environment variable
+const ASSISTANT_BOT_USER_ID = import.meta.env.VITE_ASSISTANT_BOT_USER_ID || 'assistant';
+
 interface MessageInputProps {
   onSend?: (content: string) => Promise<void>;
   placeholder?: string;
@@ -43,11 +46,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           content: response.response,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          userId: 'assistant', // Special ID for assistant
+          userId: ASSISTANT_BOT_USER_ID,
           channelId: activeChannel.id,
           threadId: threadParentId,
           user: {
-            id: 'assistant',
+            id: ASSISTANT_BOT_USER_ID,
             username: 'Assistant'
           },
           reactions: {}

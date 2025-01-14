@@ -1,5 +1,7 @@
 import { FileObject } from '../types/file';
 
+export type { FileObject };
+
 class FileService {
   async listFiles(channelId: string): Promise<FileObject[]> {
     try {

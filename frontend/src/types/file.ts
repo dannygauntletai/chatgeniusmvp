@@ -3,6 +3,7 @@ export interface FileObject {
   name: string;
   url: string;
   type: string;
+  size: number;
   createdAt: string;
   updatedAt: string;
   channelId: string;

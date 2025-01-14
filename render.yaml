@@ -54,6 +54,8 @@ services:
         value: "true"
       - key: LANGCHAIN_PROJECT
         value: "chatgenius"
+      - key: ASSISTANT_BOT_USER_ID
+        value: "assistant-bot"
 
   - type: web
     name: phone-service

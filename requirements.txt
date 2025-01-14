@@ -5,4 +5,5 @@ python-dotenv==1.0.0
 langchain-openai>=0.0.5
 langchain-pinecone>=0.0.3
 langchain-core>=0.1.18
-langchain-community>=0.0.16 
+langchain-community>=0.0.16
+langchain-text-splitter>=0.0.1 

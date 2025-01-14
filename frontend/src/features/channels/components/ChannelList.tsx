@@ -9,6 +9,8 @@ import { useUserContext } from '../../../contexts/UserContext';
 import { LeaveChannelModal } from './LeaveChannelModal';
 import { DeleteChannelModal } from './DeleteChannelModal';
 
+const PUBLIC_BUCKET_NAME = 'public-files';
+
 interface ChannelListProps {
   onCreateChannel: () => void;
 }
@@ -28,7 +30,10 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
     const loadChannels = async () => {
       try {
         const data = await ChannelService.getChannels();
-        const regularChannels = data.channels.filter(channel => !channel.name.startsWith('dm-'));
+        const regularChannels = data.channels.filter(channel => 
+          !channel.name.startsWith('dm-') && 
+          channel.name !== PUBLIC_BUCKET_NAME
+        );
         setChannels(regularChannels);
       } catch (err) {
         setError('Failed to load channels');
@@ -41,7 +46,7 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
 
     // Listen for real-time updates
     socket.on('channel:created', (channel: Channel) => {
-      if (!channel.name.startsWith('dm-')) {
+      if (!channel.name.startsWith('dm-') && channel.name !== PUBLIC_BUCKET_NAME) {
         setChannels(prev => {
           // Avoid duplicates
           const exists = prev.some(c => c.id === channel.id);
@@ -55,7 +60,7 @@ export const ChannelList = ({ onCreateChannel }: ChannelListProps) => {
 
     // Listen for channel updates
     socket.on('channel:updated', (updatedChannel: Channel) => {
-      if (!updatedChannel.name.startsWith('dm-')) {
+      if (!updatedChannel.name.startsWith('dm-') && updatedChannel.name !== PUBLIC_BUCKET_NAME) {
         setChannels(prev => 
           prev.map(channel => 
             channel.id === updatedChannel.id ? updatedChannel : channel

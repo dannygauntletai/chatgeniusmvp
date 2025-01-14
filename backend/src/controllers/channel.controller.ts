@@ -3,6 +3,8 @@ import { AuthenticatedRequest } from '../types/request.types';
 import { prisma } from '../utils/prisma';
 import { io } from '../app';
 
+const PUBLIC_BUCKET_NAME = 'public-files';
+
 export class ChannelController {
   static async createChannel(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -335,11 +337,15 @@ export class ChannelController {
       if (userChannelCount?._count.channels === 0) {
         console.log('First login detected - auto-joining public channels');
         
-        // Find all public channels
+        // Find all public channels except the public files channel
         const publicChannels = await prisma.channel.findMany({
           where: {
             isPrivate: false,
-            name: { not: { startsWith: 'dm-' } }
+            name: { 
+              not: { 
+                in: ['dm-', PUBLIC_BUCKET_NAME]
+              }
+            }
           }
         });
 
@@ -362,7 +368,11 @@ export class ChannelController {
           where: {
             AND: [
               { members: { some: { id: userId } } },
-              { name: { not: { startsWith: 'dm-' } } }
+              { name: { 
+                not: { 
+                  in: ['dm-', PUBLIC_BUCKET_NAME]
+                }
+              } }
             ]
           },
           include: {

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fileService, FileObject } from '../../../services/file.service';
+import { fileService } from '../../../services/file.service';
+import type { FileObject } from '../../../types/file';
 import { LoadingSpinner } from '../../shared/components/LoadingSpinner';
 
 const getFileIcon = (type: string) => {
@@ -49,9 +50,10 @@ const formatFileSize = (bytes: number) => {
 
 interface FileBrowserProps {
   selectedFileId?: string;
+  channelId: string;
 }
 
-export const FileBrowser = ({ selectedFileId }: FileBrowserProps) => {
+export const FileBrowser = ({ selectedFileId, channelId }: FileBrowserProps) => {
   const [files, setFiles] = useState<FileObject[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -64,7 +66,7 @@ export const FileBrowser = ({ selectedFileId }: FileBrowserProps) => {
       } else {
         setLoading(true);
       }
-      const data = await fileService.listFiles();
+      const data = await fileService.listFiles(channelId);
       setFiles(data);
       setError(null);
 
@@ -85,7 +87,7 @@ export const FileBrowser = ({ selectedFileId }: FileBrowserProps) => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedFileId]);
+  }, [selectedFileId, channelId]);
 
   useEffect(() => {
     loadFiles();
