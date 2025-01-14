@@ -25,19 +25,24 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy Prisma schema first
-COPY prisma ./prisma/
+# Copy application code
+COPY . .
 
-# Generate Prisma client and fetch query engine for the correct platform
+# Generate Prisma client and fetch query engine
 RUN cd prisma && \
     prisma generate && \
     prisma py fetch --platform debian-openssl-3.0.x
 
-# Copy remaining application code
-COPY . .
+# Make the binary executable wherever it was placed
+RUN chmod +x prisma-query-engine-*
+
+# Add a startup script to debug and ensure binary exists
+RUN echo '#!/bin/bash\necho "Checking for Prisma binary..."\nfind / -name "prisma-query-engine-*" 2>/dev/null\necho "Starting application..."\nexec "$@"' > /start.sh && \
+    chmod +x /start.sh
 
 # Expose port
 EXPOSE 8002
 
-# Start the application
+# Start the application with our debug wrapper
+ENTRYPOINT ["/start.sh"]
 CMD ["uvicorn", "assistant_service:app", "--host", "0.0.0.0", "--port", "8002"] 

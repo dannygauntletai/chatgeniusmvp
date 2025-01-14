@@ -4,6 +4,9 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /opt/render/project/src
 
+# Create Prisma cache directory
+RUN mkdir -p /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053
+
 # Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -31,7 +34,9 @@ COPY prisma ./prisma/
 # Generate Prisma client and fetch query engine for the correct platform
 RUN cd prisma && \
     prisma generate && \
-    prisma py fetch --platform debian-openssl-3.0.x
+    prisma py fetch --platform debian-openssl-3.0.x && \
+    mv prisma-query-engine-* /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/prisma-query-engine-debian-openssl-3.0.x && \
+    chmod +x /opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/prisma-query-engine-debian-openssl-3.0.x
 
 # Copy remaining application code
 COPY . .
