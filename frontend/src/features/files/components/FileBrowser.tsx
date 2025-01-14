@@ -50,8 +50,10 @@ const formatFileSize = (bytes: number) => {
 
 interface FileBrowserProps {
   selectedFileId?: string;
-  channelId: string;
+  channelId?: string;
 }
+
+const PUBLIC_FILES_CHANNEL_ID = '319af79e-3d69-4439-83cd-bb9b52f5e0ff';
 
 export const FileBrowser = ({ selectedFileId, channelId }: FileBrowserProps) => {
   const [files, setFiles] = useState<FileObject[]>([]);
@@ -66,7 +68,7 @@ export const FileBrowser = ({ selectedFileId, channelId }: FileBrowserProps) => 
       } else {
         setLoading(true);
       }
-      const data = await fileService.listFiles(channelId);
+      const data = await fileService.listFiles(channelId || PUBLIC_FILES_CHANNEL_ID);
       setFiles(data);
       setError(null);
 
