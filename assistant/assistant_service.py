@@ -61,6 +61,26 @@ phone_client = PhoneServiceClient()
 async def startup():
     try:
         print("Connecting to database...")
+        import subprocess
+        import sys
+        
+        # Debug info
+        print(f"Python version: {sys.version}")
+        print(f"Current working directory: {os.getcwd()}")
+        print("Looking for Prisma binary...")
+        try:
+            result = subprocess.run(['find', '/', '-name', 'prisma-query-engine-*'], capture_output=True, text=True)
+            print(f"Find result: {result.stdout}")
+        except Exception as e:
+            print(f"Error running find: {e}")
+            
+        # Try to fetch the binary again at runtime
+        try:
+            subprocess.run(['prisma', 'py', 'fetch', '--platform', 'debian-openssl-3.0.x'], capture_output=True, text=True)
+            print("Fetched Prisma binary at runtime")
+        except Exception as e:
+            print(f"Error fetching Prisma binary: {e}")
+            
         await prisma.connect()
         print("Database connection established")
     except Exception as e:
