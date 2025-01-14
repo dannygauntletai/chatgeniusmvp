@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, RequestHandler } from 'express';
 import multer from 'multer';
 import { FileController } from '../controllers/file.controller';
 import { DocumentController } from '../controllers/document.controller';
@@ -21,7 +21,7 @@ const upload = multer({
 });
 
 // File upload endpoint
-router.post('/upload', requireAuth, upload.single('file'), async (req: MulterRequest, res: Response): Promise<void> => {
+router.post('/upload', requireAuth, upload.single('file') as unknown as RequestHandler, async (req: MulterRequest, res: Response): Promise<void> => {
   if (!req.file) {
     res.status(400).json({ error: 'No file uploaded' });
     return;

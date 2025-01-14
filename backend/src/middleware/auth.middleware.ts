@@ -43,7 +43,7 @@ const shouldSyncWithDB = (userId: string): boolean => {
     dbSyncCache.set(userId, { userId, lastSyncAt: now });
     return true;
   }
-  
+
   return false;
 };
 
@@ -58,7 +58,7 @@ const getOrFetchClerkUser = async (userId: string) => {
 
   // Fetch fresh data from Clerk
   const clerkUser = await clerkClient.users.getUser(userId);
-  
+
   // Cache the result
   userCache.set(userId, {
     data: clerkUser,
@@ -71,13 +71,14 @@ const getOrFetchClerkUser = async (userId: string) => {
 export { AuthenticatedRequest };
 
 export const requireAuth = async (
-  req: Request, 
-  res: Response, 
+  req: Request,
+  res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
     await new Promise<void>((resolve) => {
-      ClerkExpressRequireAuth()(req, res, async () => {
+      const clerkMiddleware = ClerkExpressRequireAuth();
+      clerkMiddleware(req as any, res as any, async () => {
         try {
           const authReq = req as AuthenticatedRequest;
           if (!authReq.auth?.userId) {
