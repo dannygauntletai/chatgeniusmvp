@@ -60,9 +60,6 @@ text_splitter = RecursiveCharacterTextSplitter(
     separators=["\n\n", "\n", " ", ""]  # Try to split on paragraph breaks first
 )
 
-# Set Prisma binary path
-os.environ["PRISMA_QUERY_ENGINE_BINARY"] = "/opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/prisma-query-engine-debian-openssl-3.0.x"
-
 # Initialize Prisma client with connection handling
 prisma = Prisma(auto_register=True)
 
