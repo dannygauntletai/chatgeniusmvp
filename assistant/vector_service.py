@@ -48,11 +48,11 @@ embeddings = OpenAIEmbeddings(
     openai_api_key=os.getenv("OPENAI_API_KEY")
 )
 
+# Set Prisma binary path
+os.environ["PRISMA_QUERY_ENGINE_BINARY"] = "/opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/prisma-query-engine-debian-openssl-3.0.x"
+
 # Initialize Prisma client with connection handling
-prisma = Prisma(
-    auto_register=True,
-    binary_path="/opt/render/.cache/prisma-python/binaries/5.17.0/393aa359c9ad4a4bb28630fb5613f9c281cde053/prisma-query-engine-debian-openssl-3.0.x"
-)
+prisma = Prisma(auto_register=True)
 
 @app.post("/initialize", response_model=InitializeResponse)
 async def initialize_vector_db():
