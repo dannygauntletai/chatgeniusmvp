@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import fetch from 'node-fetch';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000';
-const DOCUMENT_SERVICE_URL = process.env.DOCUMENT_SERVICE_URL || 'http://localhost:8004';
+const ASSISTANT_SERVICE_URL = process.env.ASSISTANT_SERVICE_URL || 'http://localhost:8000';
 
 
 export class DocumentController {
@@ -18,7 +18,7 @@ export class DocumentController {
 
       // Forward the request to the Python document service
       try {
-        const response = await fetch(`${DOCUMENT_SERVICE_URL}/process`, {
+        const response = await fetch(`${ASSISTANT_SERVICE_URL}/document/process`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

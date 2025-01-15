@@ -7,8 +7,11 @@ import { MessageService } from '../services/message.service';
 export class MessageController {
   static async createMessage(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      const { content, channelId, threadId } = req.body;
-      const userId = req.auth.userId;
+      const { content, channelId, threadId, userId: providedUserId } = req.body;
+      const ASSISTANT_BOT_USER_ID = process.env.ASSISTANT_BOT_USER_ID || 'assistant-bot';
+      
+      // Use provided userId if it's the assistant, otherwise use the authenticated user's ID
+      const userId = providedUserId === ASSISTANT_BOT_USER_ID ? ASSISTANT_BOT_USER_ID : req.auth.userId;
 
       if (!content || !channelId) {
         return res.status(400).json({ message: 'Content and channelId are required' });

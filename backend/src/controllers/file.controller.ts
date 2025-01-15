@@ -10,7 +10,7 @@ interface MulterRequest extends Request {
 }
 
 const PUBLIC_BUCKET_NAME = 'Public Files';
-const DOCUMENT_SERVICE_URL = process.env.DOCUMENT_SERVICE_URL || 'http://localhost:8004';
+const ASSISTANT_SERVICE_URL = process.env.ASSISTANT_SERVICE_URL || 'http://localhost:8000';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -138,7 +138,7 @@ export class FileController {
 
       // Forward to document processing service
       try {
-        const response = await fetch(`${DOCUMENT_SERVICE_URL}/process`, {
+        const response = await fetch(`${ASSISTANT_SERVICE_URL}/document/process`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

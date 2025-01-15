@@ -8,7 +8,7 @@ interface AssistantResponse {
 
 export class AssistantService {
   static async getResponse(message: string, channelId: string, userId: string, channelType: 'public' | 'private', threadId?: string | null): Promise<AssistantResponse> {
-    const response = await fetch(`${ASSISTANT_API_URL}/assist`, {
+    const response = await fetch(`${ASSISTANT_API_URL}/assistant/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

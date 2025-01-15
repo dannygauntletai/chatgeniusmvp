@@ -1,7 +1,7 @@
 import { Channel, Message } from '@prisma/client';
 
 export class AssistantService {
-  private assistantUrl = process.env.ASSISTANT_SERVICE_URL || 'http://localhost:8002';
+  private assistantUrl = process.env.ASSISTANT_SERVICE_URL || 'http://localhost:8000';
 
   private getChannelType(channel: Channel): string {
     if (channel.isPrivate) return 'private';
@@ -10,7 +10,7 @@ export class AssistantService {
 
   async getAssistantResponse(message: Message, channel: Channel, userId: string): Promise<string> {
     try {
-      const response = await fetch(`${this.assistantUrl}/assist`, {
+      const response = await fetch(`${this.assistantUrl}/assistant/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -12,6 +12,8 @@ interface MessageItemProps {
   isThreadParent?: boolean;
 }
 
+const ASSISTANT_BOT_USER_ID = import.meta.env.VITE_ASSISTANT_BOT_USER_ID || 'assistant-bot';
+
 export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessage, isThreadParent }) => {
   const [message, setMessage] = useState({
     ...initialMessage,
@@ -141,9 +143,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
         if (!updatedReactions[emoji]) {
           updatedReactions[emoji] = [];
         }
-        const currentUser = { id: userId, username };
-        if (!updatedReactions[emoji].some(user => user.id === currentUser.id)) {
-          updatedReactions[emoji].push(currentUser);
+        if (userId && username) {
+          const currentUser = { id: userId, username };
+          if (!updatedReactions[emoji].some(user => user.id === currentUser.id)) {
+            updatedReactions[emoji].push(currentUser);
+          }
         }
         return { ...prevMessage, reactions: updatedReactions };
       });
@@ -185,6 +189,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
   };
 
   const isOwnMessage = message.userId === userId;
+  const isAssistantMessage = message.userId === ASSISTANT_BOT_USER_ID;
 
   if (!message || !message.user) {
     return null;
@@ -195,7 +200,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
       <div className="flex-shrink-0">
         <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
           <span className="text-sm font-medium text-white">
-            {message.user.username[0].toUpperCase()}
+            {isAssistantMessage ? 'A' : message.user.username[0].toUpperCase()}
           </span>
         </div>
       </div>

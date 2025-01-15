@@ -210,12 +210,12 @@ const MessageListContent = () => {
           const tempMessage = newMessages[tempMessageIndex];
           
           // Preserve assistant user information
-          if (tempMessage.userId === 'assistant') {
+          if (tempMessage.userId === 'assistant-bot') {
             newMessages[tempMessageIndex] = {
               ...message,
-              userId: 'assistant',
+              userId: 'assistant-bot',
               user: {
-                id: 'assistant',
+                id: 'assistant-bot',
                 username: 'Assistant'
               }
             };

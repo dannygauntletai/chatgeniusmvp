@@ -1,4 +1,4 @@
-const ASSISTANT_API_URL = import.meta.env.VITE_ASSISTANT_API_URL || 'http://localhost:8002';
+const ASSISTANT_API_URL = import.meta.env.VITE_ASSISTANT_API_URL || 'http://localhost:8000';
 
 interface AssistantResponse {
   response: string;
@@ -7,8 +7,8 @@ interface AssistantResponse {
 }
 
 export class AssistantService {
-  static async getResponse(message: string, channelId: string, userId: string, channelType: 'public' | 'private' | 'DM', threadId?: string | null): Promise<AssistantResponse> {
-    const response = await fetch(`${ASSISTANT_API_URL}/assist`, {
+  static async getResponse(message: string, channelId: string, userId: string, channelType: 'public' | 'private' | 'DM', threadId?: string | null, username?: string): Promise<AssistantResponse> {
+    const response = await fetch(`${ASSISTANT_API_URL}/assistant/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -18,7 +18,8 @@ export class AssistantService {
         channel_id: channelId,
         user_id: userId,
         channel_type: channelType,
-        thread_id: threadId ?? undefined
+        thread_id: threadId ?? undefined,
+        username: username || 'User'
       }),
     });
 

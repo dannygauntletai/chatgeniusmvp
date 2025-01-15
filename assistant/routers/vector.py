@@ -1,65 +1,42 @@
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict
-from prisma import Prisma
+from fastapi import APIRouter, HTTPException, Body
+from typing import List, Dict, Any, Optional
 import os
 from dotenv import load_dotenv
-from langchain_openai import OpenAIEmbeddings
-from langchain_pinecone import PineconeVectorStore
-from langchain_core.documents import Document
 from pinecone import Pinecone, ServerlessSpec
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Pinecone as LangchainPinecone
+from langchain_core.documents import Document
+from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.vectorstores import VectorStore
+from langsmith import Client
+import json
+import logging
+from datetime import datetime
+from langchain_pinecone import PineconeVectorStore
 from models import Message, InitializeResponse, RetrieveRequest, RetrieveResponse
 import asyncio
 from langsmith import Client
 from langchain_core.tracers.context import tracing_v2_enabled
+from utils import get_prisma
 
 # Load environment variables
 load_dotenv()
 
-# Initialize LangSmith
+# Initialize router
+router = APIRouter()
+
+# Initialize components
 langsmith_client = Client()
-
-# Initialize FastAPI app
-app = FastAPI(title="ChatGenius Assistant Vector Service")
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://chatgenius.fyi",
-        os.getenv("FRONTEND_URL", ""),
-        "https://chatgeniusmvp.onrender.com",
-        "https://chatgeniusmvp-vector.onrender.com",
-        "https://chatgeniusmvp-document.onrender.com",
-        "https://chatgeniusmvp-phone.onrender.com",
-        "https://chatgeniusmvp-backend.onrender.com",
-        os.getenv("VECTOR_SERVICE_URL", ""),
-        os.getenv("ASSISTANT_SERVICE_URL", ""),
-        os.getenv("PHONE_SERVICE_URL", "")
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"]
-)
-
-# Initialize Pinecone
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+prisma = get_prisma()
 
-# Initialize LangChain components
-embeddings = OpenAIEmbeddings(
-    model="text-embedding-3-large",
-    openai_api_key=os.getenv("OPENAI_API_KEY")
-)
-
-# Initialize Prisma client with connection handling
-prisma = Prisma(auto_register=True)
-
-@app.post("/initialize", response_model=InitializeResponse)
+@router.post("/initialize", response_model=InitializeResponse)
 async def initialize_vector_db():
     """Initialize the vector database with messages from the database."""
     try:
+        prisma = get_prisma()
+        
         # Delete existing index if it exists
         try:
             if "chatgenius-messages" in pc.list_indexes():
@@ -72,7 +49,8 @@ async def initialize_vector_db():
         try:
             pc.create_index(
                 name="chatgenius-messages",
-                dimension=3072,  # text-embedding-3-large dimension
+                dimension=3072,
+                metric="cosine",
                 spec=ServerlessSpec(
                     cloud="aws",
                     region="us-east-1"
@@ -135,25 +113,11 @@ async def initialize_vector_db():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to initialize vector database: {str(e)}")
 
-@app.on_event("startup")
-async def startup():
-    await prisma.connect()
-
-@app.on_event("shutdown")
-async def shutdown():
-    await prisma.disconnect()
-
-async def create_embedding(text: str) -> List[float]:
-    """Create an embedding for a given text using OpenAI's API."""
-    response = client.embeddings.create(
-        input=text,
-        model="text-embedding-3-small"
-    )
-    return response.data[0].embedding
-
 async def get_user_accessible_channels(user_id: str) -> Dict[str, List[str]]:
     """Get all channels a user has access to, grouped by type."""
     try:
+        prisma = get_prisma()
+        
         # Get public channels
         public_channels = await prisma.channel.find_many(
             where={"isPrivate": False}
@@ -173,18 +137,16 @@ async def get_user_accessible_channels(user_id: str) -> Dict[str, List[str]]:
             "public": [str(c.id) for c in public_channels],
             "private": [str(c.id) for c in private_channels]
         }
-        print(f"Found accessible channels: {channels}")
         return channels
         
     except Exception as e:
         print(f"Error getting accessible channels: {str(e)}")
-        # Return empty lists as fallback
         return {
             "public": [],
             "private": []
         }
 
-@app.post("/retrieve", response_model=RetrieveResponse)
+@router.post("/retrieve", response_model=RetrieveResponse)
 async def retrieve_similar_messages(request: RetrieveRequest):
     """Retrieve messages similar to the query."""
     try:
@@ -234,11 +196,8 @@ async def retrieve_similar_messages(request: RetrieveRequest):
             doc_docs_and_scores = doc_vector_store.similarity_search_with_score(
                 request.query,
                 k=request.top_k,
-                filter={"source_type": "document"}  # Only get document chunks
+                filter={"source_type": "document"}
             )
-
-            print("Chat results:", chat_docs_and_scores)
-            print("Document results:", doc_docs_and_scores)
             
             # Combine and sort all results by score
             all_docs_and_scores = chat_docs_and_scores + doc_docs_and_scores
@@ -247,7 +206,6 @@ async def retrieve_similar_messages(request: RetrieveRequest):
             # Format results
             messages = []
             for doc, score in all_docs_and_scores:
-                print(f"Processing doc with score {score}: {doc.metadata}")
                 # Use a much lower threshold for document results
                 doc_threshold = request.threshold * 0.5 if doc.metadata.get("source_type") == "document" else request.threshold
                 if score < doc_threshold:
@@ -277,7 +235,6 @@ async def retrieve_similar_messages(request: RetrieveRequest):
                     similarity=score
                 ))
                 
-            print(f"Returning {len(messages)} messages with scores ranging from {messages[0].similarity if messages else 0} to {messages[-1].similarity if messages else 0}")
             return RetrieveResponse(
                 query=request.query,
                 messages=messages
@@ -287,7 +244,7 @@ async def retrieve_similar_messages(request: RetrieveRequest):
         print(f"Error in retrieve_similar_messages: {str(e)}")
         return RetrieveResponse(query=request.query, messages=[])
 
-@app.post("/update")
+@router.post("/update")
 async def update_vector_db(message_id: str = Body(..., embed=True)):
     """Update the vector database with a new message."""
     print("\n=== VECTOR SERVICE UPDATE ENDPOINT CALLED ===")
@@ -338,7 +295,7 @@ async def update_vector_db(message_id: str = Body(..., embed=True)):
                 detail=f"Failed to update vector database: {str(e)}"
             )
 
-@app.post("/delete")
+@router.post("/delete")
 async def delete_from_vector_db(message_id: str = Body(..., embed=True)):
     """Delete a message from the vector database."""
     try:
@@ -357,17 +314,15 @@ async def delete_from_vector_db(message_id: str = Body(..., embed=True)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete from vector database: {str(e)}")
 
-@app.get("/stats")
+@router.get("/stats")
 async def get_index_stats():
     """Get statistics about the vector index."""
     try:
         # Get the index
         index = pc.Index("chatgenius-messages")
-        print("Connected to Pinecone index")
         
         # Get index stats
         stats = index.describe_index_stats()
-        print(f"Index stats: {stats}")
         
         return {
             "status": "ok",
@@ -378,9 +333,4 @@ async def get_index_stats():
             
     except Exception as e:
         print(f"Error getting index stats: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", "8001"))
-    uvicorn.run(app, host="0.0.0.0", port=port) 
+        raise HTTPException(status_code=500, detail=str(e)) 

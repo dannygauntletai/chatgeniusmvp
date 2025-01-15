@@ -3,19 +3,23 @@ import { socket } from './socket.service';
 import { api } from '../services/api.service';
 
 export class MessageService {
-  static async createMessage(data: { content: string; channelId?: string; threadId?: string }): Promise<Message> {
-    console.log('\n=== FRONTEND: Creating Message ===');
-    console.log('Request data:', JSON.stringify(data, null, 2));
-    const response = await api.post('/api/messages', data);
-    console.log('Response from backend:', JSON.stringify(response, null, 2));
-    return response;
+  static async createMessage(data: { content: string; channelId: string; threadId?: string; userId?: string }): Promise<Message> {
+    console.log('Creating message with data:', data);
+    const response = await api.post('/api/messages', {
+      content: data.content,
+      channelId: data.channelId,
+      threadId: data.threadId,
+      userId: data.userId
+    });
+    console.log('Message created:', response);
+    return response as Message;
   }
 
   static async updateMessage(messageId: string, content: string): Promise<Message> {
     const response = await api.put(`/api/messages/${messageId}`, {
       content
     });
-    return response;
+    return response as Message;
   }
 
   static async addReaction(messageId: string, emoji: string): Promise<void> {
@@ -32,11 +36,11 @@ export class MessageService {
 
   static async getReactions(messageId: string): Promise<Record<string, Array<{ id: string; username: string }>>> {
     const response = await api.get(`/api/messages/${messageId}/reactions`);
-    return response;
+    return response as Record<string, Array<{ id: string; username: string }>>;
   }
 
   static async getChannelMessages(channelId: string): Promise<Message[]> {
     const response = await api.get(`/api/messages/channel/${channelId}`);
-    return response;
+    return response as Message[];
   }
 } 

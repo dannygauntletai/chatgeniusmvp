@@ -1,7 +1,7 @@
 import { Message } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 
-const VECTOR_API_URL = process.env.VECTOR_API_URL || 'http://localhost:8001';
+const ASSISTANT_SERVICE_URL = process.env.ASSISTANT_SERVICE_URL || 'http://localhost:8000';
 
 interface CreateMessageData {
   content: string;
@@ -39,10 +39,10 @@ export class MessageService {
 
     // Update vector index
     try {
-      const url = `${VECTOR_API_URL}/update`;
+      const url = `${ASSISTANT_SERVICE_URL}/vector/update`;
       const body = JSON.stringify({ message_id: message.id });
       console.log('\n=== VECTOR SERVICE UPDATE REQUEST ===');
-      console.log('VECTOR_API_URL env var:', process.env.VECTOR_API_URL);
+      console.log('ASSISTANT_SERVICE_URL env var:', process.env.ASSISTANT_SERVICE_URL);
       console.log('Final URL:', url);
       console.log('Request Body:', body);
       console.log('Starting fetch request...');
@@ -74,7 +74,7 @@ export class MessageService {
         error: error.message,
         stack: error.stack,
         messageId: message.id,
-        vectorUrl: `${VECTOR_API_URL}/update`
+        vectorUrl: `${ASSISTANT_SERVICE_URL}/vector/update`
       });
       // Don't throw error to avoid breaking message creation
     }
@@ -100,7 +100,7 @@ export class MessageService {
 
     // Update vector index
     try {
-      await fetch(`${VECTOR_API_URL}/update`, {
+      await fetch(`${ASSISTANT_SERVICE_URL}/vector/update`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -121,7 +121,7 @@ export class MessageService {
 
     // Delete from vector index
     try {
-      await fetch(`${VECTOR_API_URL}/delete`, {
+      await fetch(`${ASSISTANT_SERVICE_URL}/vector/delete`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

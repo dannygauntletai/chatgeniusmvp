@@ -35,12 +35,7 @@ app.add_middleware(
         "https://chatgenius.fyi",
         os.getenv("FRONTEND_URL", ""),
         "https://chatgeniusmvp.onrender.com",
-        "https://chatgeniusmvp-vector.onrender.com",
-        "https://chatgeniusmvp-document.onrender.com",
-        "https://chatgeniusmvp-phone.onrender.com",
-        os.getenv("VECTOR_SERVICE_URL", ""),
-        os.getenv("ASSISTANT_SERVICE_URL", ""),
-        os.getenv("PHONE_SERVICE_URL", "")
+        os.getenv("ASSISTANT_SERVICE_URL", "")
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -349,4 +344,4 @@ async def retrieve_similar_messages(request: RetrieveRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001) 
+    uvicorn.run(app, host="0.0.0.0", port=8000) 

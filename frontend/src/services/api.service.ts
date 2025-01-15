@@ -1,127 +1,104 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+import { useAuth } from '@clerk/clerk-react';
 
-let authToken: string | null = null;
-let isRefreshing = false;
-let failedRequests: Array<(value?: unknown) => void> = [];
-
-const setAuthToken = (token: string | null) => {
-  console.log('Setting auth token:', token ? `${token.substring(0, 10)}...` : 'null');
-  authToken = token;
-};
-
-const getStoredToken = () => {
-  const storedToken = authToken || localStorage.getItem('authToken');
-  if (!storedToken) {
-    console.log('No token found');
-    return null;
+declare global {
+  interface Window {
+    __clerk__: any;
   }
-  
-  console.log('Using token:', storedToken.substring(0, 10) + '...');
-  return storedToken;
-};
+}
 
-const fetchWithAuth = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
-  let token = getStoredToken();
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-    ...options.headers,
-  };
+class ApiService {
+  private token: string | null = null;
+  private baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-  console.log(`Making ${options.method || 'GET'} request to ${endpoint}`);
-  
-  try {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
+  setAuthToken(token: string | null) {
+    this.token = token;
+  }
 
-    if (!response.ok) {
-      console.error(`Request failed: ${response.status} ${response.statusText}`);
-      
-      // If it's a 401, try to get a new token
-      if (response.status === 401) {
-        // If already refreshing, wait for it to complete
-        if (isRefreshing) {
-          return new Promise<T>(resolve => {
-            failedRequests.push(resolve);
-          }).then(() => fetchWithAuth(endpoint, options));
-        }
+  private async handleResponse(response: Response): Promise<any> {
+    if (response.ok) {
+      return response.json();
+    }
 
-        isRefreshing = true;
-        
-        try {
-          // Wait a short time for UserContext to potentially update the token
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Try to get a new token from localStorage
-          const newToken = localStorage.getItem('authToken');
-          if (newToken && (!token || newToken !== token)) {
-            console.log('Found new token, retrying request');
-            setAuthToken(newToken);
-            isRefreshing = false;
-            failedRequests.forEach(callback => callback());
-            failedRequests = [];
-            return fetchWithAuth(endpoint, options);
+    if (response.status === 401) {
+      // Try to get a new token from Clerk
+      try {
+        const auth = window.__clerk__;
+        if (auth) {
+          const token = await auth.session?.getToken();
+          if (token) {
+            this.setAuthToken(token);
+            // Retry the original request with the new token
+            const retryResponse = await fetch(response.url, {
+              ...response.clone(),
+              headers: {
+                ...response.headers,
+                Authorization: `Bearer ${token}`
+              }
+            });
+            return this.handleResponse(retryResponse);
           }
-
-          // If no new token was found, try to force a token refresh via UserContext
-          const userContext = document.querySelector('[data-user-context]');
-          if (userContext) {
-            const refreshEvent = new CustomEvent('refresh-token');
-            userContext.dispatchEvent(refreshEvent);
-            
-            // Wait for potential token refresh
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            // Check one more time for a new token
-            const finalToken = localStorage.getItem('authToken');
-            if (finalToken && (!token || finalToken !== token)) {
-              console.log('Got new token after refresh, retrying request');
-              setAuthToken(finalToken);
-              isRefreshing = false;
-              failedRequests.forEach(callback => callback());
-              failedRequests = [];
-              return fetchWithAuth(endpoint, options);
-            }
-          }
-        } catch (error) {
-          console.error('Error during token refresh:', error);
-        } finally {
-          isRefreshing = false;
-          failedRequests.forEach(callback => callback());
-          failedRequests = [];
         }
+      } catch (error) {
+        console.error('Failed to refresh token:', error);
+        // If we can't refresh the token, redirect to login
+        window.location.href = '/sign-in';
       }
-      
-      const error = new Error(`HTTP error! status: ${response.status}`);
-      (error as any).status = response.status;
-      throw error;
     }
 
-    const data = await response.json();
-    return data as T;
-  } catch (error) {
-    if ((error as any).status === 401) {
-      // Don't clear the token immediately, let the refresh attempt handle it
-      console.log('Auth error - token refresh will be attempted');
-    }
-    throw error;
+    throw new Error(`API Error: ${response.status}`);
   }
-};
 
-export const api = {
-  get: <T>(endpoint: string) => fetchWithAuth<T>(endpoint),
-  post: <T>(endpoint: string, body: any) => fetchWithAuth<T>(endpoint, { 
-    method: 'POST', 
-    body: JSON.stringify(body) 
-  }),
-  put: <T>(endpoint: string, body: any) => fetchWithAuth<T>(endpoint, { 
-    method: 'PUT', 
-    body: JSON.stringify(body) 
-  }),
-  delete: <T>(endpoint: string) => fetchWithAuth<T>(endpoint, { method: 'DELETE' }),
-  setAuthToken
-};
+  private async retryRequest(url: string, options: RequestInit): Promise<Response> {
+    return fetch(url, options);
+  }
 
-export { setAuthToken }; 
+  private getHeaders(): HeadersInit {
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`;
+    }
+
+    return headers;
+  }
+
+  async get(endpoint: string) {
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse(response);
+  }
+
+  async post(endpoint: string, data?: any) {
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse(response);
+  }
+
+  async put(endpoint: string, data?: any) {
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return this.handleResponse(response);
+  }
+
+  async delete(endpoint: string) {
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse(response);
+  }
+}
+
+export const api = new ApiService();
+
+// Export setAuthToken as a standalone function that uses the api instance
+export const setAuthToken = (token: string | null) => api.setAuthToken(token); 

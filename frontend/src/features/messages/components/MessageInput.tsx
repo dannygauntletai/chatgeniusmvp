@@ -7,7 +7,7 @@ import { socket } from '../../../services/socket.service';
 import { Message } from '../types/message.types';
 
 // Get assistant bot ID from environment variable
-const ASSISTANT_BOT_USER_ID = import.meta.env.VITE_ASSISTANT_BOT_USER_ID || 'assistant';
+const ASSISTANT_BOT_USER_ID = import.meta.env.VITE_ASSISTANT_BOT_USER_ID || 'assistant-bot';
 
 interface MessageInputProps {
   onSend?: (content: string) => Promise<void>;
@@ -37,7 +37,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           activeChannel.id,
           userId,
           activeChannel.isPrivate ? 'private' : 'public',
-          threadParentId
+          threadParentId,
+          username || undefined
         );
         
         // Create optimistic message for assistant's response
@@ -65,11 +66,13 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             await MessageService.createMessage({
               content: response.response,
               threadId: threadParentId,
+              userId: ASSISTANT_BOT_USER_ID
             });
           } else {
             await MessageService.createMessage({
               content: response.response,
               channelId: activeChannel.id,
+              userId: ASSISTANT_BOT_USER_ID
             });
           }
         } catch (error) {

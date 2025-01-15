@@ -5,7 +5,7 @@ import asyncio
 from httpx import TimeoutException, ConnectError
 
 class VectorServiceClient:
-    def __init__(self, base_url: str = "http://localhost:8001"):
+    def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
         self.client = httpx.AsyncClient(timeout=10.0)  # Shorter timeout
         self.max_retries = 3
@@ -52,7 +52,7 @@ class VectorServiceClient:
         try:
             response = await self._make_request_with_retry(
                 "POST",
-                f"{self.base_url}/retrieve",
+                f"{self.base_url}/vector/retrieve",
                 json={
                     "query": query,
                     "user_id": user_id,
