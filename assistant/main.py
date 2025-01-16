@@ -21,7 +21,8 @@ app.add_middleware(
         "https://chatgeniusmvp.onrender.com",
         os.getenv("BACKEND_URL", ""),
         "https://chatgeniusmvp-assistant.onrender.com",
-        "https://chatgeniusmvp-backend.onrender.com"
+        "https://chatgeniusmvp-backend.onrender.com",
+        "null"  # Handle requests with no origin
     ],
     allow_credentials=True,
     allow_methods=["*"],
