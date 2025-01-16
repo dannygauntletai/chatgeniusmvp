@@ -76,18 +76,27 @@ export const requireAuth = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    console.log('=== AUTH MIDDLEWARE START ===');
+    console.log('Headers:', req.headers);
+    console.log('Method:', req.method);
+    console.log('URL:', req.url);
+    console.log('Body:', req.body);
+    
     await new Promise<void>((resolve) => {
       const clerkMiddleware = ClerkExpressRequireAuth();
       clerkMiddleware(req as any, res as any, async () => {
         try {
           const authReq = req as AuthenticatedRequest;
           if (!authReq.auth?.userId) {
+            console.log('No userId in auth object');
             res.status(401).json({ error: 'Unauthorized' });
             resolve();
             return;
           }
 
+          console.log('Auth userId:', authReq.auth.userId);
           const clerkUser = await getOrFetchClerkUser(authReq.auth.userId);
+          console.log('Clerk user found:', clerkUser.id);
           authReq.auth.user = clerkUser;
 
           // Only sync with database if needed

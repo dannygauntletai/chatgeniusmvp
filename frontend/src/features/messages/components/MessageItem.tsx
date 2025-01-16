@@ -6,6 +6,7 @@ import { MessageReactions } from './MessageReactions';
 import { MessageService } from '../../../services/message.service';
 import { socket } from '../../../services/socket.service';
 import { useUserContext } from '../../../contexts/UserContext';
+import { AudioPlayer } from './AudioPlayer';
 
 interface MessageItemProps {
   message: Message;
@@ -50,41 +51,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
     }
   }, [initialMessage]);
 
-  useEffect(() => {
-    const loadReactions = async () => {
-      if (message.id.startsWith('temp-')) {
-        return;
-      }
-
-      let retryCount = 0;
-      const maxRetries = 3;
-      const retryDelay = 1000; // 1 second
-
-      while (retryCount < maxRetries) {
-        try {
-          const reactions = await MessageService.getReactions(message.id);
-          setMessage(prevMessage => ({
-            ...prevMessage,
-            reactions: reactions || {}
-          }));
-          break; // Success, exit the retry loop
-        } catch (error: any) {
-          console.error('Failed to load reactions:', error);
-          
-          if (error.status === 401 && retryCount < maxRetries - 1) {
-            console.log(`Retrying reaction load (${retryCount + 1}/${maxRetries})...`);
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-            retryCount++;
-          } else {
-            break;
-          }
-        }
-      }
-    };
-
-    loadReactions();
-  }, [message.id]);
-
+  // Socket event handlers for reactions
   useEffect(() => {
     const handleReactionAdded = (data: { messageId: string; reaction: { emoji: string; user: { id: string; username: string } } }) => {
       if (data.messageId === message.id) {
@@ -191,6 +158,35 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
   const isOwnMessage = message.userId === userId;
   const isAssistantMessage = message.userId === ASSISTANT_BOT_USER_ID;
 
+  const renderContent = () => {
+    // Check if the content is an MP3 link
+    if (message.content.trim().toLowerCase().endsWith('.mp3')) {
+      const displayText = message.content.length > 60 ? message.content.substring(0, 57) + '...' : message.content;
+      const isOnlyUrl = message.content.trim().startsWith('http');
+      
+      return (
+        <>
+          {!isOnlyUrl && (
+            <div className="mt-1 mb-2 text-sm text-white">
+              {displayText}
+            </div>
+          )}
+          <div className="mt-2">
+            <AudioPlayer 
+              url={message.content}
+            />
+          </div>
+        </>
+      );
+    }
+
+    return (
+      <div className="mt-1 text-sm text-white">
+        {message.content}
+      </div>
+    );
+  };
+
   if (!message || !message.user) {
     return null;
   }
@@ -215,9 +211,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
           </div>
         </div>
 
-        <div className="mt-1 text-sm text-white">
-          {message.content}
-        </div>
+        {renderContent()}
 
         <div className="mt-2 flex items-center space-x-2">
           <MessageReactions

@@ -1,22 +1,24 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Request
 from typing import List, Dict, Any, Optional
 import os
 from dotenv import load_dotenv
+import httpx
 from openai import AsyncOpenAI
 from pinecone import Pinecone, ServerlessSpec
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Pinecone as LangchainPinecone
 from langchain_core.documents import Document
 from langchain_pinecone import PineconeVectorStore
-import logging
-from datetime import datetime
-from models import Message, AssistantResponse, RetrieveRequest, RetrieveResponse
 import json
+from models import AssistantResponse, Message, RetrieveRequest, RichContent, RetrieveResponse
+from routers.vector import retrieve_similar_messages
 from langsmith import Client
 from langchain_core.tracers.context import tracing_v2_enabled
 from utils import get_prisma
-from routers.vector import retrieve_similar_messages
 from phone_client import PhoneServiceClient
+import logging
+from datetime import datetime
+import asyncio
 
 # Load environment variables
 load_dotenv()
@@ -26,9 +28,10 @@ router = APIRouter()
 
 # Constants
 ASSISTANT_BOT_USER_ID = os.getenv("ASSISTANT_BOT_USER_ID", "assistant-bot")
+PHONE_SERVICE_URL = os.getenv("PHONE_SERVICE_URL", "http://localhost:8000")
 
 # Initialize components
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 embeddings = OpenAIEmbeddings()
 langsmith_client = Client()
@@ -99,52 +102,66 @@ async def update_vector_db(message_id: str):
         )
 
 async def handle_phone_call(message: str, channel_id: str, user_id: str, thread_id: Optional[str] = None) -> bool:
-    """Check if the message is a phone call request and handle it if it is."""
+    """Handle potential phone call requests."""
     try:
-        # Extract call details from message
-        is_call, details = await phone_client.extract_call_details(message)
-        if not is_call or not details:
-            return False
+        print(f"\n=== HANDLING PHONE CALL REQUEST ===")
+        print(f"Message: {message}")
+        print(f"Channel: {channel_id}")
+        print(f"User: {user_id}")
+        print(f"Thread: {thread_id}")
+        
+        # Extract call details with context
+        async with httpx.AsyncClient(timeout=30.0) as http_client:  # Renamed to http_client
+            print(f"Calling extract endpoint: {PHONE_SERVICE_URL}/phone/extract")
+            response = await http_client.post(
+                f"{PHONE_SERVICE_URL}/phone/extract",
+                json={
+                    "message": message,
+                    "context": {
+                        "channel_id": channel_id,
+                        "user_id": user_id,
+                        "thread_id": thread_id,
+                        "channel_type": "private"  # Default to private for direct messages
+                    }
+                }
+            )
             
-        # Get context about pizza preferences
-        request = RetrieveRequest(
-            query="pizza preference",
-            channel_id=channel_id,
-            user_id=user_id,
-            channel_type="private",  # We'll search in all contexts
-            top_k=3,
-            threshold=0.3  # Lower threshold to catch more potential preferences
-        )
-        
-        # Get similar messages from vector store
-        retrieve_response = await retrieve_similar_messages(request)
-        similar_messages = retrieve_response.messages
-        
-        # Build context from similar messages
-        context = ""
-        if similar_messages:
-            context = "Based on previous conversations, my preferences are: "
-            for msg in similar_messages:
-                if "pizza" in msg.content.lower():
-                    context += f"{msg.content} "
-        
-        # Combine original message with preferences
-        call_message = details["message"]
-        if context:
-            call_message = f"{call_message} {context}"
+            if response.status_code != 200:
+                print(f"Error extracting call details: {response.text}")
+                return False
+                
+            extract_data = response.json()
+            print(f"Extract response: {extract_data}")
             
-        # Make the call
-        await phone_client.make_call(
-            to_number=details["phone_number"],
-            message=call_message,
-            channel_id=channel_id,
-            user_id=user_id,
-            thread_id=thread_id
-        )
-        return True
-        
+            if not extract_data["is_call_request"]:
+                return False
+                
+            # Make the call with extracted details
+            print(f"Initiating call to: {extract_data['phone_number']}")
+            call_response = await http_client.post(
+                f"{PHONE_SERVICE_URL}/phone/call",
+                json={
+                    "phone_number": extract_data["phone_number"],
+                    "channel_id": channel_id,
+                    "user_id": user_id,
+                    "thread_id": thread_id,
+                    "message": extract_data["message"]
+                }
+            )
+            
+            if call_response.status_code != 200:
+                print(f"Error making call: {call_response.text}")
+                return False
+                
+            print("Call initiated successfully")
+            return True
+            
     except Exception as e:
         print(f"Error handling phone call: {str(e)}")
+        print(f"Error type: {type(e)}")
+        if hasattr(e, '__traceback__'):
+            import traceback
+            print(f"Traceback: {''.join(traceback.format_tb(e.__traceback__))}")
         return False
 
 @router.post("/chat", response_model=AssistantResponse)
@@ -164,12 +181,40 @@ async def chat(
             print(f"Channel: {channel_id}")
             print(f"User: {user_id}")
             print(f"Thread: {thread_id}")
+        
+            # Extract call details
+            is_call_request, call_details = await phone_client.extract_call_details(
+                message=message,
+                context={"user_id": user_id, "channel_id": channel_id}
+            )
             
-            # Check if this is a phone call request
-            is_call = await handle_phone_call(message, channel_id, user_id, thread_id)
-            if is_call:
+            if is_call_request and call_details:
+                # Make the call
+                call_response = await phone_client.make_call(
+                    to_number=call_details["phone_number"],
+                    message=call_details["message"],
+                    channel_id=channel_id,
+                    user_id=user_id,
+                    thread_id=thread_id
+                )
+                
+                # Wait for recording to be ready
+                max_retries = 30  # 30 seconds timeout
+                recording_url = None
+                async with httpx.AsyncClient() as http_client:  # Renamed to http_client
+                    for _ in range(max_retries):
+                        recording_response = await http_client.get(
+                            f"{PHONE_SERVICE_URL}/phone/recording/{call_response['call_sid']}"
+                        )
+                        if recording_response.status_code == 200:
+                            recording_data = recording_response.json()
+                            if recording_data.get("recording_url"):
+                                recording_url = recording_data["recording_url"]
+                                break
+                        await asyncio.sleep(1)  # Wait 1 second before retrying
+                
                 return AssistantResponse(
-                    response="I've initiated the phone call as requested.",
+                    response=recording_url if recording_url else "",
                     context_used=[],
                     confidence=1.0
                 )
@@ -201,7 +246,7 @@ async def chat(
                 context += "\n"
             
             # Create chat completion
-            completion = await client.chat.completions.create(
+            completion = await openai_client.chat.completions.create(
                 model="gpt-4-turbo-preview",
                 messages=[
                     {"role": "system", "content": context},
@@ -222,4 +267,79 @@ async def chat(
             
     except Exception as e:
         print(f"Error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)) 
+
+@router.post("/call-status")
+async def call_status_callback(
+    request: Request,
+    CallSid: str = Body(...),
+    CallStatus: str = Body(None),
+    RecordingSid: str = Body(None),
+    RecordingUrl: str = Body(None),
+    RecordingDuration: int = Body(None),
+    RecordingStatus: str = Body(None),
+    AccountSid: str = Body(None),
+    ChannelId: str = Body(None),
+    UserId: str = Body(None)
+):
+    """Handle call status and recording status updates."""
+    try:
+        print(f"\n=== CALL STATUS/RECORDING CALLBACK RECEIVED ===")
+        print(f"Raw request data: {await request.json()}")
+        print(f"Query parameters: {request.query_params}")
+        print(f"Call SID: {CallSid}")
+        print(f"Call Status: {CallStatus}")
+        print(f"Recording SID: {RecordingSid}")
+        print(f"Recording Status: {RecordingStatus}")
+        print(f"Recording URL: {RecordingUrl}")
+        print(f"Recording Duration: {RecordingDuration}")
+        print(f"Channel ID: {ChannelId}")
+        print(f"User ID: {UserId}")
+        print(f"Account SID: {AccountSid}")
+        
+        # If this is a recording status callback and the recording is completed
+        if RecordingSid and RecordingStatus == "completed" and RecordingUrl:
+            print("Recording is complete, fetching details...")
+            # Create a new message with the recording
+            async with httpx.AsyncClient() as client:
+                # First get the recording details from our phone service
+                recording_response = await client.get(
+                    f"{PHONE_SERVICE_URL}/phone/recording/{CallSid}"
+                )
+                print(f"Recording response status: {recording_response.status_code}")
+                if recording_response.status_code == 200:
+                    recording_data = recording_response.json()
+                    print(f"Recording data: {recording_data}")
+                    
+                    # Create message with recording
+                    message_response = await client.post(
+                        f"{os.getenv('BACKEND_URL')}/api/messages/assistant",
+                        json={
+                            "content": recording_data["recording_url"],
+                            "channelId": ChannelId,
+                            "userId": ASSISTANT_BOT_USER_ID
+                        }
+                    )
+                    print(f"Message creation response status: {message_response.status_code}")
+                    print(f"Message creation response: {message_response.text}")
+            return {"status": "success", "type": "recording"}
+            
+        # If this is a call status callback
+        elif CallStatus:
+            print(f"Call status update: {CallStatus}")
+            if CallStatus == "completed":
+                print("Call completed, waiting for recording callback")
+                return {"status": "success", "type": "call"}
+            else:
+                print(f"Call in progress: {CallStatus}")
+                return {"status": "pending", "type": "call"}
+                
+        return {"status": "unknown"}
+        
+    except Exception as e:
+        print(f"Error in call status callback: {str(e)}")
+        print(f"Error type: {type(e)}")
+        if hasattr(e, '__traceback__'):
+            import traceback
+            print(f"Traceback: {''.join(traceback.format_tb(e.__traceback__))}")
         raise HTTPException(status_code=500, detail=str(e)) 

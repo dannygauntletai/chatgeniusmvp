@@ -76,9 +76,8 @@ export class MessageService {
         messageId: message.id,
         vectorUrl: `${ASSISTANT_SERVICE_URL}/vector/update`
       });
-      // Don't throw error to avoid breaking message creation
     }
-
+    
     return message;
   }
 
@@ -133,5 +132,50 @@ export class MessageService {
     }
 
     return message;
+  }
+
+  static async getChannelMessages(channelId: string) {
+    const messages = await prisma.message.findMany({
+      where: {
+        channelId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+        reactions: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    // Group reactions by emoji for each message
+    return messages.map(message => {
+      const groupedReactions = message.reactions.reduce((acc, reaction) => {
+        if (!acc[reaction.emoji]) {
+          acc[reaction.emoji] = [];
+        }
+        acc[reaction.emoji].push(reaction.user);
+        return acc;
+      }, {} as Record<string, Array<{ id: string; username: string }>>);
+
+      return {
+        ...message,
+        reactions: groupedReactions,
+      };
+    });
   }
 } 

@@ -18,6 +18,8 @@ import asyncio
 from langsmith import Client
 from langchain_core.tracers.context import tracing_v2_enabled
 from utils import get_prisma
+from openai import AsyncOpenAI
+from pydantic import BaseModel, validator
 
 # Load environment variables
 load_dotenv()
@@ -30,6 +32,21 @@ langsmith_client = Client()
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 prisma = get_prisma()
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+class RetrieveRequest(BaseModel):
+    query: str
+    user_id: str
+    channel_id: Optional[str] = None
+    channel_type: str = "public"
+    top_k: int = 5
+    threshold: float = 0.4  # Lowered from 0.7 to 0.4 for better semantic matching
+    
+    @validator("threshold")
+    def validate_threshold(cls, v):
+        if v < 0 or v > 1:
+            raise ValueError("Threshold must be between 0 and 1")
+        return v
 
 @router.post("/initialize", response_model=InitializeResponse)
 async def initialize_vector_db():
@@ -148,18 +165,70 @@ async def get_user_accessible_channels(user_id: str) -> Dict[str, List[str]]:
 
 @router.post("/retrieve", response_model=RetrieveResponse)
 async def retrieve_similar_messages(request: RetrieveRequest):
-    """Retrieve messages similar to the query."""
+    """Retrieve messages and documents similar to the query, with user-specific context when relevant."""
     try:
         with tracing_v2_enabled() as tracer:
-            print(f"Retrieving similar messages for query: {request.query}")
+            print(f"Retrieving similar messages and documents for query: {request.query}")
             
             # Get user accessible channels
             accessible_channels = await get_user_accessible_channels(request.user_id)
             
+            # Check if this is a user-specific request
+            is_user_specific = False
+            target_username = None
+            
+            # Get the requesting user's username
+            user = await prisma.user.find_unique(
+                where={"id": request.user_id}
+            )
+            requesting_username = user.username if user else None
+            
+            # Use LLM to analyze if the query is requesting user-specific information
+            analysis_prompt = f"""Analyze this query to determine:
+            1. Is this a request that would benefit from user preferences or past history?
+            2. What type of preferences or history would be relevant?
+            3. Should we look for specific user information?
+
+            For example:
+            - "ordering pizza" -> Yes, should check for pizza preferences, dietary restrictions, past orders
+            - "call someone" -> Yes, should check for contact preferences, past call history
+            - "what's the weather" -> No, general query without user context
+
+            Query: {request.query}
+            Current user: {requesting_username}
+
+            Respond in JSON format:
+            {{
+                "needs_preferences": boolean,
+                "preference_types": list[string],
+                "is_user_specific": boolean,
+                "target_user": string or null,
+                "search_queries": list[string]
+            }}
+            """
+            
+            completion = await client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=[
+                    {"role": "system", "content": "You analyze queries to determine what user preferences or history would be relevant. Be thorough in identifying opportunities to personalize responses."},
+                    {"role": "user", "content": analysis_prompt}
+                ],
+                temperature=0,
+                response_format={ "type": "json_object" }
+            )
+            
+            analysis = json.loads(completion.choices[0].message.content)
+            print(f"Query analysis: {analysis}")
+            
+            is_user_specific = analysis["is_user_specific"]
+            target_username = analysis["target_user"]
+            
+            if is_user_specific and not target_username and requesting_username:
+                target_username = requesting_username
+            
             # Build filter based on channel type and user access
             filter_dict = {}
             if request.channel_type == "assistant":
-                # When talking to assistant, search across all channels
                 filter_dict = {
                     "$or": [
                         {"channel_type": "public"},
@@ -178,14 +247,30 @@ async def retrieve_similar_messages(request: RetrieveRequest):
                     "channel_type": "public"
                 }
             
-            # Initialize vector store for chat messages
+            # Add user-specific filter if needed
+            if is_user_specific and target_username:
+                print(f"Filtering results for user: {target_username}")
+                if "$or" in filter_dict:
+                    # Add sender_name condition to each existing filter
+                    for condition in filter_dict["$or"]:
+                        condition["sender_name"] = target_username
+                else:
+                    filter_dict["sender_name"] = target_username
+            
+            # Initialize vector stores
             chat_vector_store = PineconeVectorStore(
                 index_name="chatgenius-messages",
                 embedding=embeddings,
                 pinecone_api_key=os.getenv("PINECONE_API_KEY")
             )
             
-            # Initialize vector store for documents
+            summary_vector_store = PineconeVectorStore(
+                index_name="chatgenius-messages",
+                embedding=embeddings,
+                pinecone_api_key=os.getenv("PINECONE_API_KEY"),
+                namespace="document_summaries"
+            )
+            
             doc_vector_store = PineconeVectorStore(
                 index_name="chatgenius-messages",
                 embedding=embeddings,
@@ -193,65 +278,109 @@ async def retrieve_similar_messages(request: RetrieveRequest):
                 namespace="documents"
             )
             
-            # Perform similarity search on chat messages
-            chat_docs_and_scores = chat_vector_store.similarity_search_with_score(
+            # Search chat messages
+            print(f"\nSearching chat messages for: {request.query}")
+            chat_results = chat_vector_store.similarity_search_with_score(
                 request.query,
                 k=request.top_k,
                 filter=filter_dict
             )
-
-            # Perform similarity search on documents with lower threshold
-            doc_docs_and_scores = doc_vector_store.similarity_search_with_score(
+            
+            # Search document summaries
+            print(f"\nSearching document summaries for: {request.query}")
+            summary_results = summary_vector_store.similarity_search_with_score(
                 request.query,
-                k=request.top_k,
-                filter={"source_type": "document"}
+                k=5  # Start with top 5 most relevant summaries
             )
             
-            # Combine and sort all results by score
-            all_docs_and_scores = chat_docs_and_scores + doc_docs_and_scores
-            all_docs_and_scores.sort(key=lambda x: x[1], reverse=True)
-            
-            # Format results
-            messages = []
-            for doc, score in all_docs_and_scores:
-                # Use a lower threshold for all results to improve recall
-                base_threshold = 0.1  # Lowered from 0.2 to match RetrieveRequest
-                doc_threshold = base_threshold * 0.5 if doc.metadata.get("source_type") == "document" else base_threshold
-                if score < doc_threshold:
+            # Process summary results and fetch associated documents
+            doc_results = []
+            for summary_doc, summary_score in summary_results:
+                print(f"\nFound summary with score {summary_score}:")
+                print(f"Content: {summary_doc.page_content}")
+                print(f"Full metadata: {json.dumps(summary_doc.metadata, indent=2)}")
+                
+                # Lower threshold for document summaries since they're pre-filtered for relevance
+                summary_threshold = 0.3
+                if summary_score < summary_threshold:
+                    print(f"Score {summary_score} below threshold {summary_threshold}, skipping")
                     continue
                 
-                # Get content from metadata fields, with fallback chain
-                content = (
-                    doc.metadata.get("content") or 
-                    doc.metadata.get("text") or 
-                    doc.metadata.get("page_content") or 
-                    doc.page_content
-                )
-                
-                # For document chunks, add rich context
-                if doc.metadata.get("source_type") == "document":
+                # Get the associated document chunks
+                if "file_id" in summary_doc.metadata:
+                    print(f"\nFetching chunks for file_id: {summary_doc.metadata['file_id']}")
+                    file_docs = doc_vector_store.similarity_search_with_score(
+                        "",  # Empty query since we're using filter
+                        k=50,  # Get more chunks to ensure we have full context
+                        filter={
+                            "file_id": summary_doc.metadata["file_id"],
+                            "source_type": "document"
+                        }
+                    )
+                    print(f"Found {len(file_docs)} chunks")
+                    
+                    # Add all chunks with the summary's score
+                    for doc, _ in file_docs:
+                        doc_results.append((doc, summary_score))
+                else:
+                    print(f"\nWARNING: Summary document missing file_id in metadata")
+            
+            # Format all results
+            messages = []
+            
+            # Format chat results
+            for doc, score in chat_results:
+                if score < request.threshold:
+                    continue
+                try:
+                    messages.append(Message(
+                        message_id=doc.metadata.get("message_id", "unknown"),
+                        channel_name=doc.metadata.get("channel_name", "Unknown"),
+                        sender_name=doc.metadata.get("sender_name", "Unknown"),
+                        content=doc.page_content,
+                        similarity=score
+                    ))
+                except Exception as e:
+                    print(f"Error formatting chat result: {str(e)}")
+                    continue
+                        
+            # Format document results
+            for doc, score in doc_results:
+                try:
+                    content = doc.page_content
+                    if not content:
+                        continue
+                        
+                    # Add source context
                     file_name = doc.metadata.get("file_name", "Unknown document")
                     page = doc.metadata.get("page_number", "unknown")
                     chunk_index = doc.metadata.get("chunk_index", 0)
                     total_chunks = doc.metadata.get("total_chunks", 1)
-                    content = f"[Source: {file_name} (Page {page}, Section {chunk_index + 1}/{total_chunks})]\n{content}"
-                
-                messages.append(Message(
-                    message_id=doc.metadata.get("message_id") or doc.metadata.get("file_id", ""),
-                    channel_name=doc.metadata.get("channel_name", "Document"),
-                    sender_name=doc.metadata.get("sender_name", file_name) if doc.metadata.get("source_type") == "document" else doc.metadata.get("sender_name", "Unknown"),
-                    content=content,
-                    similarity=score
-                ))
-                
+                    
+                    formatted_content = f"[Source: {file_name} (Page {page}, Part {chunk_index + 1}/{total_chunks})]\n{content}"
+                    
+                    messages.append(Message(
+                        message_id=doc.metadata.get("file_id", "unknown"),
+                        channel_name="Document",
+                        sender_name=file_name,
+                        content=formatted_content,
+                        similarity=score
+                    ))
+                except Exception as e:
+                    print(f"Error formatting document result: {str(e)}")
+                    continue
+            
+            # Sort all messages by similarity score
+            messages.sort(key=lambda x: x.similarity, reverse=True)
+            
             return RetrieveResponse(
                 query=request.query,
                 messages=messages
             )
-            
+                
     except Exception as e:
-        print(f"Error in retrieve_similar_messages: {str(e)}")
-        return RetrieveResponse(query=request.query, messages=[])
+        print(f"Error retrieving similar messages: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/update")
 async def update_vector_db(message_id: str = Body(..., embed=True)):

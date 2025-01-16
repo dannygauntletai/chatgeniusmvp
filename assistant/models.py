@@ -35,15 +35,28 @@ class ProcessDocumentResponse(BaseModel):
 class CallResponse(BaseModel):
     message: str
     call_sid: str
+    recording: Optional[Dict[str, Any]] = None
 
 class TranscriptionResponse(BaseModel):
     message: str
     response: str
 
+class CallRecording(BaseModel):
+    url: str
+    duration: int
+    status: str
+    recording_sid: str
+
+class RichContent(BaseModel):
+    type: str  # "text", "audio", etc.
+    content: str
+    metadata: Optional[Dict[str, Any]] = None
+
 class AssistantResponse(BaseModel):
     response: str
     context_used: List[Message]
     confidence: float
+    rich_content: Optional[RichContent] = None
 
 class FileObject(BaseModel):
     id: str

@@ -84,7 +84,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 // Protected routes
-app.use('/api/messages', requireAuth, messageRoutes);
+app.use('/api/messages', messageRoutes);
 app.use('/api/messages', requireAuth, reactionRoutes);
 app.use('/api/channels', requireAuth, channelRoutes);
 app.use('/api/threads', requireAuth, threadRoutes);

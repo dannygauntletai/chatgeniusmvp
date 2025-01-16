@@ -24,23 +24,42 @@ class ApiService {
       try {
         const auth = window.__clerk__;
         if (auth) {
-          const token = await auth.session?.getToken();
-          if (token) {
-            this.setAuthToken(token);
-            // Retry the original request with the new token
-            const retryResponse = await fetch(response.url, {
-              ...response.clone(),
-              headers: {
-                ...response.headers,
-                Authorization: `Bearer ${token}`
+          const session = await auth.session;
+          if (session) {
+            const token = await session.getToken();
+            if (token) {
+              this.setAuthToken(token);
+              
+              // Get the request method from the request object
+              const requestMethod = response.type === 'cors' ? 'GET' : 'POST';
+              
+              // Get the original request options
+              const options: RequestInit = {
+                method: requestMethod,
+                headers: {
+                  ...this.getHeaders(),
+                  Authorization: `Bearer ${token}`
+                }
+              };
+              
+              // If it's not a GET request and has a body
+              if (requestMethod !== 'GET' && response.body) {
+                const body = await response.clone().text();
+                if (body) {
+                  options.body = body;
+                }
               }
-            });
-            return this.handleResponse(retryResponse);
+              
+              // Retry the request with the new token
+              const retryResponse = await fetch(response.url, options);
+              return this.handleResponse(retryResponse);
+            }
           }
         }
+        // If we couldn't get a new token, redirect to login
+        window.location.href = '/sign-in';
       } catch (error) {
         console.error('Failed to refresh token:', error);
-        // If we can't refresh the token, redirect to login
         window.location.href = '/sign-in';
       }
     }

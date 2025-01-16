@@ -45,6 +45,7 @@ model Message {
   content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  richContent Json?
 
   userId    String
   user      User       @relation(fields: [userId], references: [id])

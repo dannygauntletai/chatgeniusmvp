@@ -86,4 +86,16 @@ class PhoneServiceClient:
             if response.status != 200:
                 error_detail = await response.text()
                 raise Exception(f"Failed to get call status: {error_detail}")
+            return await response.json()
+    
+    async def get_call_recording(self, call_sid: str) -> Dict:
+        """Get the recording URL for a call."""
+        await self._ensure_session()
+        
+        async with self.session.get(
+            f"{self.base_url}/phone/recording/{call_sid}"
+        ) as response:
+            if response.status != 200:
+                error_detail = await response.text()
+                raise Exception(f"Failed to get call recording: {error_detail}")
             return await response.json() 
