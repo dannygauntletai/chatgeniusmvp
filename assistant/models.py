@@ -17,11 +17,11 @@ class InitializeResponse(BaseModel):
 
 class RetrieveRequest(BaseModel):
     query: str
-    channel_id: str
     user_id: str
+    channel_id: str
     channel_type: str
-    top_k: int = 5
-    threshold: float = 0.7
+    top_k: int = 20
+    threshold: float = 0.1
 
 class RetrieveResponse(BaseModel):
     query: str

@@ -16,6 +16,7 @@ from langsmith import Client
 from langchain_core.tracers.context import tracing_v2_enabled
 from utils import get_prisma
 from routers.vector import retrieve_similar_messages
+from phone_client import PhoneServiceClient
 
 # Load environment variables
 load_dotenv()
@@ -31,6 +32,7 @@ client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 embeddings = OpenAIEmbeddings()
 langsmith_client = Client()
+phone_client = PhoneServiceClient()
 
 async def update_vector_db(message_id: str):
     """Update the vector database with a new message."""
@@ -96,6 +98,55 @@ async def update_vector_db(message_id: str):
             detail=f"Failed to update vector database: {str(e)}"
         )
 
+async def handle_phone_call(message: str, channel_id: str, user_id: str, thread_id: Optional[str] = None) -> bool:
+    """Check if the message is a phone call request and handle it if it is."""
+    try:
+        # Extract call details from message
+        is_call, details = await phone_client.extract_call_details(message)
+        if not is_call or not details:
+            return False
+            
+        # Get context about pizza preferences
+        request = RetrieveRequest(
+            query="pizza preference",
+            channel_id=channel_id,
+            user_id=user_id,
+            channel_type="private",  # We'll search in all contexts
+            top_k=3,
+            threshold=0.3  # Lower threshold to catch more potential preferences
+        )
+        
+        # Get similar messages from vector store
+        retrieve_response = await retrieve_similar_messages(request)
+        similar_messages = retrieve_response.messages
+        
+        # Build context from similar messages
+        context = ""
+        if similar_messages:
+            context = "Based on previous conversations, my preferences are: "
+            for msg in similar_messages:
+                if "pizza" in msg.content.lower():
+                    context += f"{msg.content} "
+        
+        # Combine original message with preferences
+        call_message = details["message"]
+        if context:
+            call_message = f"{call_message} {context}"
+            
+        # Make the call
+        await phone_client.make_call(
+            to_number=details["phone_number"],
+            message=call_message,
+            channel_id=channel_id,
+            user_id=user_id,
+            thread_id=thread_id
+        )
+        return True
+        
+    except Exception as e:
+        print(f"Error handling phone call: {str(e)}")
+        return False
+
 @router.post("/chat", response_model=AssistantResponse)
 async def chat(
     message: str = Body(...),
@@ -113,6 +164,15 @@ async def chat(
             print(f"Channel: {channel_id}")
             print(f"User: {user_id}")
             print(f"Thread: {thread_id}")
+            
+            # Check if this is a phone call request
+            is_call = await handle_phone_call(message, channel_id, user_id, thread_id)
+            if is_call:
+                return AssistantResponse(
+                    response="I've initiated the phone call as requested.",
+                    context_used=[],
+                    confidence=1.0
+                )
             
             # Create RetrieveRequest instance
             request = RetrieveRequest(

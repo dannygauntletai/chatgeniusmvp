@@ -10,7 +10,7 @@ class PhoneServiceClient:
     """Client for interacting with the phone service."""
     
     def __init__(self, base_url: str = None):
-        self.base_url = base_url or os.getenv("PHONE_SERVICE_URL", "http://localhost:8003")
+        self.base_url = base_url or os.getenv("PHONE_SERVICE_URL", "http://localhost:8000")
         self.session = None
         
     async def _ensure_session(self):
@@ -27,12 +27,12 @@ class PhoneServiceClient:
         """Extract call details from a message."""
         await self._ensure_session()
         
-        print(f"Making request to {self.base_url}/extract")  # Debug print
+        print(f"Making request to {self.base_url}/phone/extract")  # Debug print
         print(f"Request data: {{'message': {message}, 'context': {context}}}")  # Debug print
         
         try:
             async with self.session.post(
-                f"{self.base_url}/extract",
+                f"{self.base_url}/phone/extract",
                 json={
                     "message": message,
                     "context": context
@@ -57,15 +57,17 @@ class PhoneServiceClient:
             print(f"Error in extract_call_details: {str(e)}")  # Debug print
             raise
     
-    async def make_call(self, to_number: str, message: str, from_number: Optional[str] = None) -> Dict:
+    async def make_call(self, to_number: str, message: str, from_number: Optional[str] = None, channel_id: str = None, user_id: str = None, thread_id: Optional[str] = None) -> Dict:
         """Make a phone call with a message."""
         await self._ensure_session()
         
         async with self.session.post(
-            f"{self.base_url}/call",
+            f"{self.base_url}/phone/call",
             json={
-                "to_number": to_number,
-                "from_number": from_number,
+                "phone_number": to_number,
+                "channel_id": channel_id,
+                "user_id": user_id,
+                "thread_id": thread_id,
                 "message": message
             }
         ) as response:
@@ -79,7 +81,7 @@ class PhoneServiceClient:
         await self._ensure_session()
         
         async with self.session.get(
-            f"{self.base_url}/call/{call_sid}"
+            f"{self.base_url}/phone/call/{call_sid}"
         ) as response:
             if response.status != 200:
                 error_detail = await response.text()

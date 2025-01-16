@@ -158,7 +158,15 @@ async def retrieve_similar_messages(request: RetrieveRequest):
             
             # Build filter based on channel type and user access
             filter_dict = {}
-            if request.channel_type == "private":
+            if request.channel_type == "assistant":
+                # When talking to assistant, search across all channels
+                filter_dict = {
+                    "$or": [
+                        {"channel_type": "public"},
+                        {"channel_type": "private"}
+                    ]
+                }
+            elif request.channel_type == "private":
                 filter_dict = {
                     "$or": [
                         {"channel_type": "public"},
@@ -206,8 +214,9 @@ async def retrieve_similar_messages(request: RetrieveRequest):
             # Format results
             messages = []
             for doc, score in all_docs_and_scores:
-                # Use a much lower threshold for document results
-                doc_threshold = request.threshold * 0.5 if doc.metadata.get("source_type") == "document" else request.threshold
+                # Use a lower threshold for all results to improve recall
+                base_threshold = 0.1  # Lowered from 0.2 to match RetrieveRequest
+                doc_threshold = base_threshold * 0.5 if doc.metadata.get("source_type") == "document" else base_threshold
                 if score < doc_threshold:
                     continue
                 
@@ -274,18 +283,30 @@ async def update_vector_db(message_id: str = Body(..., embed=True)):
                 return {"status": "skipped", "reason": "assistant mention"}
             
             # Create document
+            print(f"\n=== Creating document for vector store ===")
+            print(f"Message content: {message.content}")
             doc = Document(
                 page_content=message.content,
                 metadata={
                     "message_id": message.id,
                     "channel_id": message.channelId,
                     "channel_name": message.channel.name if message.channel else None,
+                    "channel_type": "private" if message.channel and message.channel.isPrivate else "public",
                     "sender_name": message.user.username if message.user else None,
                 }
             )
+            print(f"Document created with metadata: {doc.metadata}")
+            
+            # Generate embedding
+            print(f"\n=== Generating embedding ===")
+            texts = [message.content]
+            embeddings_list = await embeddings.aembed_documents(texts)
+            print(f"Embedding generated with dimension: {len(embeddings_list[0])}")
             
             # Add to vector store
+            print(f"\n=== Adding to vector store ===")
             await vector_store.aadd_documents([doc])
+            print(f"Successfully added to vector store")
             
             return {"status": "success"}
             
