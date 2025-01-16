@@ -9,6 +9,35 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor': [
+              'react',
+              'react-dom',
+              'react-router-dom',
+              '@clerk/clerk-react',
+              'socket.io-client'
+            ],
+            'ui': [
+              '@radix-ui/react-dialog',
+              '@radix-ui/react-dropdown-menu',
+              '@radix-ui/react-popover',
+              '@radix-ui/react-toast',
+              'cmdk'
+            ],
+            'features': [
+              './src/features/messages',
+              './src/features/channels',
+              './src/features/files',
+              './src/features/search'
+            ]
+          }
+        }
+      },
+      chunkSizeWarningLimit: 1000
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
@@ -18,7 +47,7 @@ export default defineConfig(({ mode }) => {
       port: parseInt(env.PORT || '3000'),
       proxy: {
         '/api': {
-          target: env.VITE_API_URL || 'http://localhost:8080',
+          target: env.VITE_API_URL || 'http://localhost:5000',
           changeOrigin: true,
           secure: false,
         },
