@@ -21,17 +21,7 @@ export default defineConfig(({ mode }) => {
               'socket.io-client'
             ],
             'ui': [
-              '@radix-ui/react-dialog',
-              '@radix-ui/react-dropdown-menu',
-              '@radix-ui/react-popover',
-              '@radix-ui/react-toast',
               'cmdk'
-            ],
-            'features': [
-              './src/features/messages',
-              './src/features/channels',
-              './src/features/files',
-              './src/features/search'
             ]
           }
         }
