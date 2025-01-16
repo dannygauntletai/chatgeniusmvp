@@ -29,7 +29,7 @@ router = APIRouter()
 # Constants
 ASSISTANT_BOT_USER_ID = os.getenv("ASSISTANT_BOT_USER_ID", "assistant-bot")
 # Use the assistant service URL since phone endpoints are in the same service
-PHONE_SERVICE_URL = os.getenv("ASSISTANT_SERVICE_URL", "http://localhost:8000")
+ASSISTANT_SERVICE_URL = os.getenv("ASSISTANT_SERVICE_URL", "http://localhost:8000")
 
 # Initialize components
 openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -111,52 +111,36 @@ async def handle_phone_call(message: str, channel_id: str, user_id: str, thread_
         print(f"User: {user_id}")
         print(f"Thread: {thread_id}")
         
-        # Extract call details with context
-        async with httpx.AsyncClient(timeout=30.0) as http_client:  # Renamed to http_client
-            print(f"Calling extract endpoint: {PHONE_SERVICE_URL}/phone/extract")
-            response = await http_client.post(
-                f"{PHONE_SERVICE_URL}/phone/extract",
-                json={
-                    "message": message,
-                    "context": {
-                        "channel_id": channel_id,
-                        "user_id": user_id,
-                        "thread_id": thread_id,
-                        "channel_type": "private"  # Default to private for direct messages
-                    }
-                }
-            )
+        # Extract call details with context using direct client call
+        extract_data = await phone_client.extract_call_details(
+            message=message,
+            context={
+                "channel_id": channel_id,
+                "user_id": user_id,
+                "thread_id": thread_id,
+                "channel_type": "private"  # Default to private for direct messages
+            }
+        )
+        
+        if not extract_data["is_call_request"]:
+            return False
             
-            if response.status_code != 200:
-                print(f"Error extracting call details: {response.text}")
-                return False
-                
-            extract_data = response.json()
-            print(f"Extract response: {extract_data}")
+        # Make the call with extracted details using direct client call
+        call_response = await phone_client.make_call(
+            to_number=extract_data["phone_number"],
+            message=extract_data["message"],
+            channel_id=channel_id,
+            user_id=user_id,
+            thread_id=thread_id
+        )
+        
+        if not call_response:
+            print("Error making call: No response from phone client")
+            return False
             
-            if not extract_data["is_call_request"]:
-                return False
-                
-            # Make the call with extracted details
-            print(f"Initiating call to: {extract_data['phone_number']}")
-            call_response = await http_client.post(
-                f"{PHONE_SERVICE_URL}/phone/call",
-                json={
-                    "phone_number": extract_data["phone_number"],
-                    "channel_id": channel_id,
-                    "user_id": user_id,
-                    "thread_id": thread_id,
-                    "message": extract_data["message"]
-                }
-            )
-            
-            if call_response.status_code != 200:
-                print(f"Error making call: {call_response.text}")
-                return False
-                
-            print("Call initiated successfully")
-            return True
-            
+        print("Call initiated successfully")
+        return True
+        
     except Exception as e:
         print(f"Error handling phone call: {str(e)}")
         print(f"Error type: {type(e)}")
@@ -204,7 +188,7 @@ async def chat(
                 async with httpx.AsyncClient() as http_client:
                     for _ in range(max_retries):
                         recording_response = await http_client.get(
-                            f"{PHONE_SERVICE_URL}/phone/recording/{call_response['call_sid']}"
+                            f"{ASSISTANT_SERVICE_URL}/phone/recording/{call_response['call_sid']}"
                         )
                         if recording_response.status_code == 200:
                             recording_data = recording_response.json()
@@ -304,7 +288,7 @@ async def call_status_callback(
             async with httpx.AsyncClient() as client:
                 # First get the recording details from our phone service
                 recording_response = await client.get(
-                    f"{PHONE_SERVICE_URL}/phone/recording/{CallSid}"
+                    f"{ASSISTANT_SERVICE_URL}/phone/recording/{CallSid}"
                 )
                 print(f"Recording response status: {recording_response.status_code}")
                 if recording_response.status_code == 200:

@@ -29,10 +29,20 @@ router = APIRouter()
 
 # Initialize components
 langsmith_client = Client()
-pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+pc = Pinecone(
+    api_key=os.getenv("PINECONE_API_KEY"),
+    environment=os.getenv("PINECONE_ENVIRONMENT", "gcp-starter")
+)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 prisma = get_prisma()
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Initialize vector store with environment variables
+vector_store = PineconeVectorStore(
+    index_name="chatgenius-messages",
+    embedding=embeddings,
+    pinecone_api_key=os.getenv("PINECONE_API_KEY")
+)
 
 class RetrieveRequest(BaseModel):
     query: str
