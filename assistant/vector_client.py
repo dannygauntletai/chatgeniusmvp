@@ -3,10 +3,16 @@ import httpx
 from models import Message, InitializeResponse, RetrieveResponse
 import asyncio
 from httpx import TimeoutException, ConnectError
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class VectorServiceClient:
-    def __init__(self, base_url: str = "http://localhost:8000"):
-        self.base_url = base_url
+    def __init__(self, base_url: str = None):
+        # Use the assistant service URL since vector endpoints are in the same service
+        self.base_url = base_url or os.getenv("ASSISTANT_SERVICE_URL", "http://localhost:8000")
         self.client = httpx.AsyncClient(timeout=10.0)  # Shorter timeout
         self.max_retries = 3
     

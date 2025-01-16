@@ -28,7 +28,8 @@ router = APIRouter()
 
 # Constants
 ASSISTANT_BOT_USER_ID = os.getenv("ASSISTANT_BOT_USER_ID", "assistant-bot")
-PHONE_SERVICE_URL = os.getenv("PHONE_SERVICE_URL", "http://localhost:8000")
+# Use the assistant service URL since phone endpoints are in the same service
+PHONE_SERVICE_URL = os.getenv("ASSISTANT_SERVICE_URL", "http://localhost:8000")
 
 # Initialize components
 openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))

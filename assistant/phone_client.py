@@ -10,7 +10,8 @@ class PhoneServiceClient:
     """Client for interacting with the phone service."""
     
     def __init__(self, base_url: str = None):
-        self.base_url = base_url or os.getenv("PHONE_SERVICE_URL", "http://localhost:8000")
+        # Use the assistant service URL since phone endpoints are in the same service
+        self.base_url = base_url or os.getenv("ASSISTANT_SERVICE_URL", "http://localhost:8000")
         self.session = None
         
     async def _ensure_session(self):
