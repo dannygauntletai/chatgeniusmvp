@@ -19,7 +19,9 @@ app.add_middleware(
         "https://chatgenius.fyi",
         os.getenv("FRONTEND_URL", ""),
         "https://chatgeniusmvp.onrender.com",
-        os.getenv("BACKEND_URL", "")
+        os.getenv("BACKEND_URL", ""),
+        "https://chatgeniusmvp-assistant.onrender.com",
+        "https://chatgeniusmvp-backend.onrender.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],

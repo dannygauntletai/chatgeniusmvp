@@ -25,6 +25,7 @@ const allowedOrigins = [
   'https://chatgeniusmvp-document.onrender.com',
   'https://chatgeniusmvp-phone.onrender.com',
   'https://chatgeniusmvp-backend.onrender.com',
+  'https://chatgeniusmvp-assistant.onrender.com',
   process.env.FRONTEND_URL
 ].filter((origin): origin is string => Boolean(origin));
 
