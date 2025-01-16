@@ -631,4 +631,55 @@ export class ChannelController {
       next(error);
     }
   }
+
+  static async getPublicChannel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.auth.userId;
+
+      // Get or create public bucket
+      let publicBucket = await prisma.channel.findFirst({
+        where: { name: PUBLIC_BUCKET_NAME }
+      });
+
+      // Create public bucket if it doesn't exist
+      if (!publicBucket) {
+        publicBucket = await prisma.channel.create({
+          data: {
+            name: PUBLIC_BUCKET_NAME,
+            isPrivate: false,
+            ownerId: userId,
+            members: {
+              connect: { id: userId }
+            }
+          }
+        });
+      } else {
+        // Check if user is a member
+        const isMember = await prisma.channel.findFirst({
+          where: {
+            id: publicBucket.id,
+            members: {
+              some: { id: userId }
+            }
+          }
+        });
+
+        // Add user as member if not already
+        if (!isMember) {
+          await prisma.channel.update({
+            where: { id: publicBucket.id },
+            data: {
+              members: {
+                connect: { id: userId }
+              }
+            }
+          });
+        }
+      }
+
+      res.json(publicBucket);
+    } catch (error) {
+      next(error);
+    }
+  }
 } 

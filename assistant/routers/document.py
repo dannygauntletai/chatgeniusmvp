@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Body
 from typing import List, Dict, Any, Optional
 import os
 from dotenv import load_dotenv
@@ -19,7 +19,7 @@ from models import ProcessDocumentResponse, FileObject
 load_dotenv()
 
 # Initialize router
-router = APIRouter(prefix="/api/files")
+router = APIRouter(prefix="/document")
 
 # Initialize components
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
@@ -115,4 +115,75 @@ async def delete_document(channel_id: str, file_name: str):
         return {"message": f"Document {file_name} deleted successfully"}
         
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/process", response_model=ProcessDocumentResponse)
+async def process_document(
+    file_id: str = Body(...),
+    file_url: str = Body(...),
+    channel_id: str = Body(...),
+    uploader_id: str = Body(...),
+    file_name: str = Body(...),
+    file_type: str = Body(...)
+):
+    """Process a document from a URL and store its chunks in the vector store."""
+    try:
+        print(f"\n=== DOCUMENT SERVICE PROCESS ENDPOINT CALLED ===")
+        print(f"File: {file_name}")
+        print(f"URL: {file_url}")
+        print(f"Channel: {channel_id}")
+        print(f"User: {uploader_id}")
+        
+        # Download file from URL
+        async with httpx.AsyncClient() as client:
+            response = await client.get(file_url)
+            if response.status_code != 200:
+                raise HTTPException(status_code=400, detail="Failed to download file")
+            
+            # Create temporary file
+            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                temp_file.write(response.content)
+                temp_path = temp_file.name
+            
+            # Load document based on file type
+            if file_name.lower().endswith('.pdf'):
+                loader = PyPDFLoader(temp_path)
+                pages = loader.load()
+            else:
+                loader = TextLoader(temp_path)
+                pages = loader.load()
+            
+            # Split text into chunks
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,
+                chunk_overlap=200
+            )
+            chunks = text_splitter.split_documents(pages)
+            
+            # Add metadata to chunks
+            for i, chunk in enumerate(chunks):
+                chunk.metadata.update({
+                    "file_name": file_name,
+                    "channel_id": channel_id,
+                    "user_id": uploader_id,
+                    "source_type": "document",
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    "page_number": chunk.metadata.get("page", 1)
+                })
+            
+            # Store chunks in vector store
+            vector_store.add_documents(chunks)
+            
+            # Clean up temporary file
+            os.unlink(temp_path)
+            
+            return ProcessDocumentResponse(
+                message="Document processed successfully",
+                file_name=file_name,
+                chunks_created=len(chunks)
+            )
+            
+    except Exception as e:
+        print(f"Error processing document: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 

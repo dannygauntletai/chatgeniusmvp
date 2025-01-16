@@ -228,9 +228,9 @@ async def retrieve_similar_messages(request: RetrieveRequest):
                     content = f"[Source: {file_name} (Page {page}, Section {chunk_index + 1}/{total_chunks})]\n{content}"
                 
                 messages.append(Message(
-                    message_id=doc.metadata["message_id"],
-                    channel_name=doc.metadata["channel_name"],
-                    sender_name=doc.metadata["sender_name"],
+                    message_id=doc.metadata.get("message_id") or doc.metadata.get("file_id", ""),
+                    channel_name=doc.metadata.get("channel_name", "Document"),
+                    sender_name=doc.metadata.get("sender_name", file_name) if doc.metadata.get("source_type") == "document" else doc.metadata.get("sender_name", "Unknown"),
                     content=content,
                     similarity=score
                 ))

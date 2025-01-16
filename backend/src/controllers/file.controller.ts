@@ -3,9 +3,10 @@ import { prisma } from '../lib/prisma';
 import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import fetch from 'node-fetch';
+import { AuthenticatedRequest } from '../types/request.types';
 
 // Update MulterRequest type using the global Express namespace
-interface MulterRequest extends Request {
+interface MulterRequest extends AuthenticatedRequest {
   file?: Express.Multer.File;
 }
 
@@ -18,59 +19,14 @@ const supabase = createClient(
 );
 
 export class FileController {
-  private async getOrCreatePublicBucket(userId: string) {
-    // Check if public bucket exists
-    let publicBucket = await prisma.channel.findFirst({
-      where: { name: PUBLIC_BUCKET_NAME }
-    });
-
-    // Create public bucket if it doesn't exist
-    if (!publicBucket) {
-      publicBucket = await prisma.channel.create({
-        data: {
-          id: uuidv4(),
-          name: PUBLIC_BUCKET_NAME,
-          isPrivate: false,
-          ownerId: userId,
-          members: {
-            connect: { id: userId }
-          }
-        }
-      });
-    } else {
-      // Check if user is a member
-      const isMember = await prisma.channel.findFirst({
-        where: {
-          id: publicBucket.id,
-          members: {
-            some: { id: userId }
-          }
-        }
-      });
-
-      // Add user as member if not already
-      if (!isMember) {
-        await prisma.channel.update({
-          where: { id: publicBucket.id },
-          data: {
-            members: {
-              connect: { id: userId }
-            }
-          }
-        });
-      }
-    }
-
-    return publicBucket;
-  }
-
   async uploadFile(req: MulterRequest, res: Response) {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
-      const userId = req.body.userId;
+      // Use authenticated user's ID if no userId provided in body
+      const userId = req.body.userId || req.auth.userId;
       if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
       }
@@ -126,7 +82,6 @@ export class FileController {
         id: uuidv4(),
         name: req.file.originalname,
         type: req.file.mimetype,
-        size: req.file.size,
         url: publicUrl,
         channelId: targetChannelId,
         userId: userId
@@ -136,8 +91,9 @@ export class FileController {
         data: file
       });
 
-      // Forward to document processing service
+      // Process document immediately after successful upload
       try {
+        console.log('Initiating document processing for:', fileRecord.name);
         const response = await fetch(`${ASSISTANT_SERVICE_URL}/document/process`, {
           method: 'POST',
           headers: {
@@ -154,12 +110,13 @@ export class FileController {
         });
 
         if (!response.ok) {
-          console.error('Document service error:', response.statusText);
-          // Don't fail the upload if document processing fails
+          console.error('Document processing error:', await response.text());
+        } else {
+          console.log('Document processing initiated successfully');
         }
       } catch (processingError) {
-        console.error('Error forwarding to document service:', processingError);
-        // Don't fail the upload if document processing fails
+        console.error('Error initiating document processing:', processingError);
+        // Don't fail the upload if processing fails
       }
 
       return res.json(fileRecord);
@@ -197,29 +154,49 @@ export class FileController {
     }
   }
 
-  async updateFileStatus(req: Request, res: Response) {
-    try {
-      const { fileId } = req.params;
-      const { status } = req.body;
+  private async getOrCreatePublicBucket(userId: string) {
+    // Check if public bucket exists
+    let publicBucket = await prisma.channel.findFirst({
+      where: { name: PUBLIC_BUCKET_NAME }
+    });
 
-      if (!status) {
-        return res.status(400).json({ error: 'Status is required' });
-      }
-
-      const validStatuses = ['PENDING', 'PROCESSED', 'FAILED', 'UNSUPPORTED'];
-      if (!validStatuses.includes(status)) {
-        return res.status(400).json({ error: 'Invalid status' });
-      }
-
-      const updatedFile = await prisma.file.update({
-        where: { id: fileId },
-        data: { status }
+    // Create public bucket if it doesn't exist
+    if (!publicBucket) {
+      publicBucket = await prisma.channel.create({
+        data: {
+          id: uuidv4(),
+          name: PUBLIC_BUCKET_NAME,
+          isPrivate: false,
+          ownerId: userId,
+          members: {
+            connect: { id: userId }
+          }
+        }
+      });
+    } else {
+      // Check if user is a member
+      const isMember = await prisma.channel.findFirst({
+        where: {
+          id: publicBucket.id,
+          members: {
+            some: { id: userId }
+          }
+        }
       });
 
-      return res.json(updatedFile);
-    } catch (error) {
-      console.error('Error updating file status:', error);
-      return res.status(500).json({ error: 'Failed to update file status' });
+      // Add user as member if not already
+      if (!isMember) {
+        await prisma.channel.update({
+          where: { id: publicBucket.id },
+          data: {
+            members: {
+              connect: { id: userId }
+            }
+          }
+        });
+      }
     }
+
+    return publicBucket;
   }
 } 

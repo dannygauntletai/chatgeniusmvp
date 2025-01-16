@@ -52,10 +52,12 @@ class ApiService {
     return fetch(url, options);
   }
 
-  private getHeaders(): HeadersInit {
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
+  private getHeaders(isFormData: boolean = false): HeadersInit {
+    const headers: HeadersInit = {};
+
+    if (!isFormData) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     if (this.token) {
       headers.Authorization = `Bearer ${this.token}`;
@@ -71,11 +73,11 @@ class ApiService {
     return this.handleResponse(response);
   }
 
-  async post(endpoint: string, data?: any) {
+  async post(endpoint: string, data?: any, isFormData: boolean = false) {
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(data),
+      headers: this.getHeaders(isFormData),
+      body: isFormData ? data : JSON.stringify(data),
     });
     return this.handleResponse(response);
   }

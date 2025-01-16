@@ -74,7 +74,6 @@ model File {
   name      String
   url       String
   type      String
-  status    String   @default("PENDING")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

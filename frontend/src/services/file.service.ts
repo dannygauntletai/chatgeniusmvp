@@ -1,12 +1,18 @@
 import { api } from './api.service';
 import { API_URL } from '../config';
 
+declare global {
+  interface Window {
+    __clerk__: any;
+  }
+}
+
 interface FileObject {
   id: string;
   name: string;
   url: string;
   type: string;
-  size: number;
+  status: string;
   createdAt: string;
   updatedAt: string;
   channelId: string;
@@ -25,36 +31,49 @@ interface FileObject {
 export type { FileObject };
 
 class FileService {
+  private publicBucketId: string | null = null;
+
+  private async getPublicBucketId(): Promise<string> {
+    try {
+      if (this.publicBucketId) {
+        return this.publicBucketId;
+      }
+
+      // Get the public bucket channel
+      const response = await api.get('/api/channels/public');
+      if (!response.id) {
+        throw new Error('Public bucket not found');
+      }
+      this.publicBucketId = response.id;
+      return response.id;
+    } catch (error) {
+      console.error('Error getting public bucket:', error);
+      throw error;
+    }
+  }
+
   async listFiles(channelId: string): Promise<FileObject[]> {
     try {
-      return await api.get<FileObject[]>(`/api/files/channel/${channelId}`);
+      const response = await api.get(`/api/files/channel/${channelId}`);
+      return response as FileObject[];
     } catch (error) {
       console.error('Error listing files:', error);
       throw error;
     }
   }
 
-  async uploadFile(file: File, channelId: string, userId: string): Promise<FileObject> {
+  async uploadFile(file: File, channelId?: string): Promise<FileObject> {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('channelId', channelId);
-      formData.append('userId', userId);
+      
+      // If no channelId provided, get the public bucket ID
+      const targetChannelId = channelId || await this.getPublicBucketId();
+      formData.append('channelId', targetChannelId);
 
-      const response = await fetch(`${API_URL}/api/files/upload`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to upload file');
-      }
-
-      return await response.json();
+      // Use the api service which handles auth
+      const response = await api.post('/api/files/upload', formData, true);
+      return response as FileObject;
     } catch (error) {
       console.error('Error uploading file:', error);
       throw error;
@@ -63,9 +82,10 @@ class FileService {
 
   async getUserFiles(userId: string): Promise<FileObject[]> {
     try {
-      return await api.get<FileObject[]>(`/api/files/user/${userId}`);
+      const response = await api.get(`/api/files/user/${userId}`);
+      return response as FileObject[];
     } catch (error) {
-      console.error('Error fetching user files:', error);
+      console.error('Error getting user files:', error);
       throw error;
     }
   }

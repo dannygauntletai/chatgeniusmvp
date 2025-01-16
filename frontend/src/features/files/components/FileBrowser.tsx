@@ -159,7 +159,7 @@ export const FileBrowser = ({ selectedFileId, channelId }: FileBrowserProps) => 
               {files.map((file) => (
                 <div
                   id={`file-${file.id}`}
-                  key={file.url}
+                  key={file.id}
                   className={`group flex flex-col items-center p-4 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors ${
                     selectedFileId === file.id ? 'ring-2 ring-blue-500' : ''
                   }`}

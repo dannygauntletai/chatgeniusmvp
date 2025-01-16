@@ -12,6 +12,9 @@ const handleRequest = (handler: (req: AuthenticatedRequest, res: any, next: any)
   return (req, res, next) => handler(req as unknown as AuthenticatedRequest, res, next);
 };
 
+// Get public channel (must be before /:channelId routes)
+router.get('/public', handleRequest(ChannelController.getPublicChannel));
+
 router.post('/', handleRequest(ChannelController.createChannel));
 router.get('/', handleRequest(ChannelController.getChannels));
 router.post('/:channelId/join', handleRequest(ChannelController.joinChannel));
