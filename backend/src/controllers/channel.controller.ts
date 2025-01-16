@@ -383,6 +383,7 @@ export class ChannelController {
               select: {
                 id: true,
                 username: true,
+                status: true,
                 user_status: true
               }
             },
@@ -414,6 +415,7 @@ export class ChannelController {
               select: {
                 id: true,
                 username: true,
+                status: true,
                 user_status: true
               }
             },

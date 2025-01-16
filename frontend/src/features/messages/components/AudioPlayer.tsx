@@ -30,6 +30,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ url }) => {
             
             audio.addEventListener('loadedmetadata', handleLoadedMetadata);
             audio.addEventListener('error', handleError);
+            audio.addEventListener('timeupdate', handleTimeUpdate);
+            audio.addEventListener('ended', handleEnded);
             
             // Force load the audio
             audio.load();
@@ -37,6 +39,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ url }) => {
             return () => {
                 audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
                 audio.removeEventListener('error', handleError);
+                audio.removeEventListener('timeupdate', handleTimeUpdate);
+                audio.removeEventListener('ended', handleEnded);
             };
         }
     }, [url]);  // Add url as dependency to reload when URL changes
@@ -110,13 +114,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ url }) => {
                 </div>
             </div>
 
-            <audio
-                ref={audioRef}
-                src={url}
-                onTimeUpdate={handleTimeUpdate}
-                onEnded={handleEnded}
-                className="hidden"
-            />
+            <audio ref={audioRef} src={url} preload="metadata" />
         </div>
     );
 }; 

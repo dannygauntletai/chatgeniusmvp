@@ -21,44 +21,121 @@ const supabase = createClient(
 export class FileController {
   async uploadFile(req: MulterRequest, res: Response) {
     try {
+      console.log('\n=== FILE UPLOAD ENDPOINT HIT ===');
+      console.log('Headers:', req.headers);
+      
       if (!req.file) {
+        console.error('No file in request');
         return res.status(400).json({ error: 'No file uploaded' });
       }
+
+      console.log('File details:', {
+        originalName: req.file.originalname,
+        size: req.file.size,
+        mimeType: req.file.mimetype,
+        encoding: req.file.encoding
+      });
 
       // Use authenticated user's ID if no userId provided in body
       const userId = req.body.userId || req.auth.userId;
       if (!userId) {
+        console.error('No user ID found in request');
         return res.status(400).json({ error: 'User ID is required' });
       }
+      console.log('User ID:', userId);
 
       let targetChannelId = req.body.channelId;
-      
-      // If no channel specified or channel is 'undefined', use public bucket
+      console.log('Requested channel ID:', targetChannelId);
+
+      // If no channel specified, use public bucket
       if (!targetChannelId || targetChannelId === 'undefined') {
-        console.log('No valid channel ID provided, using public bucket');
+        console.log('No channel ID provided, getting/creating public bucket...');
         const publicBucket = await this.getOrCreatePublicBucket(userId);
         targetChannelId = publicBucket.id;
-      } else {
-        // Verify user has access to the channel
-        const channel = await prisma.channel.findFirst({
-          where: {
-            id: targetChannelId,
-            OR: [
-              { ownerId: userId },
-              { members: { some: { id: userId } } }
-            ]
-          }
-        });
+      }
 
-        if (!channel) {
-          return res.status(403).json({ error: 'Access denied to channel' });
+      // Verify channel access and ensure user membership
+      console.log('Verifying channel access...');
+      let channel = await prisma.channel.findFirst({
+        where: { id: targetChannelId },
+        include: { members: true }
+      });
+
+      console.log('Channel lookup result:', {
+        found: !!channel,
+        channelId: targetChannelId,
+        name: channel?.name,
+        memberCount: channel?.members?.length,
+        isOwner: channel?.ownerId === userId,
+        isMember: channel?.members?.some(m => m.id === userId)
+      });
+
+      // If channel not found, check if it's meant to be public bucket
+      if (!channel) {
+        console.log('Channel not found, checking if public bucket exists...');
+        channel = await prisma.channel.findFirst({
+          where: { name: PUBLIC_BUCKET_NAME },
+          include: { members: true }
+        });
+        
+        if (channel) {
+          console.log('Found public bucket, using it instead');
+          targetChannelId = channel.id;
         }
       }
 
+      // Create public bucket if needed
+      if (!channel && (!targetChannelId || targetChannelId === 'undefined')) {
+        console.log('Creating new public bucket...');
+        channel = await prisma.channel.create({
+          data: {
+            name: PUBLIC_BUCKET_NAME,
+            isPrivate: false,
+            ownerId: userId,
+            members: {
+              connect: { id: userId }
+            }
+          },
+          include: { members: true }
+        });
+        targetChannelId = channel.id;
+      }
+
+      if (!channel) {
+        console.error('Channel not found:', targetChannelId);
+        return res.status(404).json({ error: 'Channel not found' });
+      }
+
+      // Check if user has access (is owner or member)
+      const hasAccess = channel.ownerId === userId || channel.members.some(m => m.id === userId);
+      
+      // For public bucket, automatically add user as member if not already
+      if (!hasAccess && channel.name === PUBLIC_BUCKET_NAME) {
+        console.log('Adding user to public bucket...');
+        await prisma.channel.update({
+          where: { id: channel.id },
+          data: {
+            members: {
+              connect: { id: userId }
+            }
+          }
+        });
+      } else if (!hasAccess) {
+        console.error('User does not have access to channel:', {
+          userId,
+          channelId: targetChannelId,
+          error: 'User is not a member'
+        });
+        return res.status(403).json({ error: 'Access denied to channel' });
+      }
+
       // Upload file to Supabase Storage
+      console.log('Preparing Supabase upload...');
       const fileBuffer = req.file.buffer;
       const fileName = `${uuidv4()}-${req.file.originalname}`;
+      console.log('Generated filename:', fileName);
       
+      console.log('Uploading to Supabase...');
       const { error: uploadError } = await supabase
         .storage
         .from('chat-genius-files')
@@ -68,15 +145,18 @@ export class FileController {
         });
 
       if (uploadError) {
-        console.error('Error uploading to Supabase:', uploadError);
+        console.error('Supabase upload error:', uploadError);
         return res.status(500).json({ error: 'Failed to upload file to storage' });
       }
+      console.log('Supabase upload successful');
 
       // Get the public URL for the uploaded file
+      console.log('Getting public URL...');
       const { data: { publicUrl } } = supabase
         .storage
         .from('chat-genius-files')
         .getPublicUrl(fileName);
+      console.log('Public URL:', publicUrl);
 
       const file = {
         id: uuidv4(),
@@ -87,9 +167,11 @@ export class FileController {
         userId: userId
       };
 
+      console.log('Creating database record...');
       const fileRecord = await prisma.file.create({
         data: file
       });
+      console.log('Database record created:', fileRecord.id);
 
       // Process document immediately after successful upload
       try {
@@ -110,7 +192,8 @@ export class FileController {
         });
 
         if (!response.ok) {
-          console.error('Document processing error:', await response.text());
+          const errorText = await response.text();
+          console.error('Document processing error response:', errorText);
         } else {
           console.log('Document processing initiated successfully');
         }
@@ -119,9 +202,10 @@ export class FileController {
         // Don't fail the upload if processing fails
       }
 
+      console.log('Upload process completed successfully');
       return res.json(fileRecord);
     } catch (error) {
-      console.error('Error uploading file:', error);
+      console.error('Unhandled error in file upload:', error);
       return res.status(500).json({ error: 'Failed to upload file' });
     }
   }
@@ -155,45 +239,60 @@ export class FileController {
   }
 
   private async getOrCreatePublicBucket(userId: string) {
+    console.log('Getting or creating public bucket for user:', userId);
+    
     // Check if public bucket exists
     let publicBucket = await prisma.channel.findFirst({
-      where: { name: PUBLIC_BUCKET_NAME }
+      where: { name: PUBLIC_BUCKET_NAME },
+      include: {
+        members: true
+      }
     });
+
+    console.log('Existing public bucket:', publicBucket);
 
     // Create public bucket if it doesn't exist
     if (!publicBucket) {
+      console.log('Creating new public bucket...');
       publicBucket = await prisma.channel.create({
         data: {
-          id: uuidv4(),
           name: PUBLIC_BUCKET_NAME,
           isPrivate: false,
           ownerId: userId,
           members: {
             connect: { id: userId }
           }
+        },
+        include: {
+          members: true
         }
       });
-    } else {
-      // Check if user is a member
-      const isMember = await prisma.channel.findFirst({
-        where: {
-          id: publicBucket.id,
-          members: {
-            some: { id: userId }
-          }
-        }
-      });
+      console.log('Created new public bucket:', publicBucket.id);
+    }
 
-      // Add user as member if not already
-      if (!isMember) {
+    // Check if user is a member
+    const isMember = publicBucket.members.some(member => member.id === userId);
+    console.log('Is user member of public bucket:', isMember);
+
+    // Add user as member if not already
+    if (!isMember) {
+      console.log('Adding user to public bucket members...');
+      try {
         await prisma.channel.update({
           where: { id: publicBucket.id },
           data: {
             members: {
               connect: { id: userId }
             }
+          },
+          include: {
+            members: true
           }
         });
+        console.log('Successfully added user to public bucket');
+      } catch (error) {
+        console.error('Error adding user to public bucket:', error);
+        throw error;
       }
     }
 

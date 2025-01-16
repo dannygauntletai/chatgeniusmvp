@@ -8,7 +8,8 @@ import { Channel } from '../../../types/channel.types';
 interface ChannelMember {
   id: string;
   username: string;
-  user_status: string;
+  status: string;
+  user_status?: string;
 }
 
 export const DMList = () => {
@@ -83,10 +84,29 @@ export const DMList = () => {
       }
     });
 
+    // Listen for user status changes
+    socket.on('user:status_changed', ({ userId: updatedUserId, status, user_status }: { userId: string; status: string; user_status?: string }) => {
+      setChannels(prev => prev.map(channel => {
+        const otherMember = channel.members.find(member => member.id !== userId);
+        if (otherMember && otherMember.id === updatedUserId) {
+          return {
+            ...channel,
+            members: channel.members.map(member => 
+              member.id === updatedUserId 
+                ? { ...member, status, user_status } 
+                : member
+            )
+          };
+        }
+        return channel;
+      }));
+    });
+
     return () => {
       socket.off('channel:created');
       socket.off('channel:updated');
       socket.off('channel:member_left');
+      socket.off('user:status_changed');
     };
   }, [userId, activeChannel, setActiveChannel]);
 
@@ -142,7 +162,11 @@ export const DMList = () => {
               <div className="flex items-center space-x-2">
                 <div 
                   className={`w-2 h-2 rounded-full ${
-                    otherMember.user_status === 'online' ? 'bg-green-500' : 'bg-red-500'
+                    otherMember.id === import.meta.env.VITE_ASSISTANT_BOT_USER_ID 
+                      ? 'bg-green-500'
+                      : otherMember.status === 'online' 
+                        ? 'bg-green-500' 
+                        : 'bg-red-500'
                   }`}
                 />
                 <span className={`text-sm font-medium ${

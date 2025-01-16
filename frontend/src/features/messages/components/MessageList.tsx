@@ -17,6 +17,7 @@ import { MessageInput } from './MessageInput';
 
 const ChannelHeader = ({ name, isPrivate, channelId }: { name: string; isPrivate: boolean; channelId: string }) => {
   const [userStatus, setUserStatus] = useState<string | null>(null);
+  const [userEmoji, setUserEmoji] = useState<string>('😊');
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const { username: currentUsername } = useUserContext();
@@ -36,7 +37,13 @@ const ChannelHeader = ({ name, isPrivate, channelId }: { name: string; isPrivate
           const user = users.find(u => u.username === otherUser);
           if (user) {
             setOtherUserId(user.id);
-            setUserStatus(user.user_status || '😊');
+            if (user.id === import.meta.env.VITE_ASSISTANT_BOT_USER_ID) {
+              setUserStatus('online');
+              setUserEmoji('🤖');
+            } else {
+              setUserStatus(user.status || 'offline');
+              setUserEmoji(user.user_status || '😊');
+            }
           }
         } catch (error) {
           console.error('Failed to fetch user status:', error);
@@ -50,16 +57,19 @@ const ChannelHeader = ({ name, isPrivate, channelId }: { name: string; isPrivate
   useEffect(() => {
     if (!otherUserId) return;
 
-    const handleStatusUpdate = (data: { userId: string; status: string }) => {
+    const handleStatusUpdate = (data: { userId: string; status: string; user_status?: string }) => {
       if (data.userId === otherUserId) {
         setUserStatus(data.status);
+        if (data.user_status) {
+          setUserEmoji(data.user_status);
+        }
       }
     };
 
-    socket.on('user:status_updated', handleStatusUpdate);
+    socket.on('user:status_changed', handleStatusUpdate);
 
     return () => {
-      socket.off('user:status_updated', handleStatusUpdate);
+      socket.off('user:status_changed', handleStatusUpdate);
     };
   }, [otherUserId]);
 
@@ -76,8 +86,11 @@ const ChannelHeader = ({ name, isPrivate, channelId }: { name: string; isPrivate
           </h2>
           {name.startsWith('dm-') && userStatus && (
             <>
-              <span className="text-gray-300">-</span>
-              <span>{userStatus}</span>
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${userStatus === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="text-gray-300">-</span>
+                <span>{userEmoji}</span>
+              </div>
             </>
           )}
         </div>

@@ -91,10 +91,15 @@ export const connectSocket = (sessionId: string, sessionToken: string) => {
   
   // Reconnect with new auth data
   socket.connect();
+  
+  // Emit online status
+  socket.emit('status:update', 'online');
 };
 
 export const disconnectSocket = () => {
+  // Emit offline status before disconnecting
   if (socket.connected) {
+    socket.emit('status:update', 'offline');
     socket.disconnect();
   }
   

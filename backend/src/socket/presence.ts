@@ -7,8 +7,15 @@ export const handlePresenceEvents = (socket: Socket) => {
   // Set user as online when they connect
   const setUserOnline = async () => {
     try {
-      await UserService.updateUserStatus(userId, 'online');
-      socket.broadcast.emit('user:status_changed', { userId, status: 'online' });
+      // Don't update assistant's status
+      if (userId === process.env.ASSISTANT_BOT_USER_ID) return;
+      
+      const user = await UserService.updateUserStatus(userId, 'online');
+      socket.broadcast.emit('user:status_changed', { 
+        userId, 
+        status: 'online',
+        user_status: user.user_status 
+      });
     } catch (error) {
       console.error('Error setting user online:', error);
     }
@@ -17,8 +24,15 @@ export const handlePresenceEvents = (socket: Socket) => {
   // Set user as offline when they disconnect
   const setUserOffline = async () => {
     try {
-      await UserService.updateUserStatus(userId, 'offline');
-      socket.broadcast.emit('user:status_changed', { userId, status: 'offline' });
+      // Don't update assistant's status
+      if (userId === process.env.ASSISTANT_BOT_USER_ID) return;
+      
+      const user = await UserService.updateUserStatus(userId, 'offline');
+      socket.broadcast.emit('user:status_changed', { 
+        userId, 
+        status: 'offline',
+        user_status: user.user_status 
+      });
     } catch (error) {
       console.error('Error setting user offline:', error);
     }
@@ -33,8 +47,15 @@ export const handlePresenceEvents = (socket: Socket) => {
   // Handle custom status updates
   socket.on('status:update', async (status: string) => {
     try {
-      await UserService.updateUserStatus(userId, status);
-      socket.broadcast.emit('user:status_changed', { userId, status });
+      // Don't update assistant's status
+      if (userId === process.env.ASSISTANT_BOT_USER_ID) return;
+      
+      const user = await UserService.updateUserStatus(userId, status);
+      socket.broadcast.emit('user:status_changed', { 
+        userId, 
+        status,
+        user_status: user.user_status 
+      });
     } catch (error) {
       console.error('Error updating user status:', error);
     }

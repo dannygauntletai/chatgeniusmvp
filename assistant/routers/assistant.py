@@ -169,9 +169,9 @@ async def chat(
     message: str = Body(...),
     channel_id: str = Body(...),
     user_id: str = Body(...),
-    thread_id: Optional[str] = Body(None),
     channel_type: str = Body(...),
-    username: str = Body(...)
+    username: str = Body(...),
+    thread_id: Optional[str] = Body(None)  # Keep parameter but ignore it
 ):
     """Process a chat message and return an AI response."""
     try:
@@ -180,7 +180,7 @@ async def chat(
             print(f"Message: {message}")
             print(f"Channel: {channel_id}")
             print(f"User: {user_id}")
-            print(f"Thread: {thread_id}")
+            # Removed thread_id logging since we're ignoring it
         
             # Extract call details
             is_call_request, call_details = await phone_client.extract_call_details(
@@ -194,14 +194,13 @@ async def chat(
                     to_number=call_details["phone_number"],
                     message=call_details["message"],
                     channel_id=channel_id,
-                    user_id=user_id,
-                    thread_id=thread_id
+                    user_id=user_id
                 )
                 
                 # Wait for recording to be ready
                 max_retries = 30  # 30 seconds timeout
                 recording_url = None
-                async with httpx.AsyncClient() as http_client:  # Renamed to http_client
+                async with httpx.AsyncClient() as http_client:
                     for _ in range(max_retries):
                         recording_response = await http_client.get(
                             f"{PHONE_SERVICE_URL}/phone/recording/{call_response['call_sid']}"
@@ -218,7 +217,7 @@ async def chat(
                     context_used=[],
                     confidence=1.0
                 )
-            
+
             # Create RetrieveRequest instance
             request = RetrieveRequest(
                 query=message,
@@ -256,7 +255,7 @@ async def chat(
                 max_tokens=1000,
                 n=1
             )
-            
+
             response = completion.choices[0].message.content
             
             return AssistantResponse(

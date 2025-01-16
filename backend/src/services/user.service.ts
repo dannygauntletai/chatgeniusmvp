@@ -16,12 +16,19 @@ export class UserService {
       });
 
       if (!user) {
+        const defaultStatus = userData.id === process.env.ASSISTANT_BOT_USER_ID ? 'online' : 'offline';
         user = await prisma.user.create({
           data: {
             id: userData.id,
             username: userData.username,
-            email: userData.email || null
+            email: userData.email || null,
+            status: defaultStatus
           }
+        });
+      } else if (userData.id === process.env.ASSISTANT_BOT_USER_ID && user.status !== 'online') {
+        user = await prisma.user.update({
+          where: { id: userData.id },
+          data: { status: 'online' }
         });
       }
 

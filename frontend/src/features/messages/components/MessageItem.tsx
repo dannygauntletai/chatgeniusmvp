@@ -20,6 +20,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
     ...initialMessage,
     reactions: initialMessage.reactions || {}
   });
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const { openThread } = useThread();
   const { userId, username } = useUserContext();
 
@@ -158,7 +159,49 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
   const isOwnMessage = message.userId === userId;
   const isAssistantMessage = message.userId === ASSISTANT_BOT_USER_ID;
 
+  const handleTextToSpeech = async () => {
+    try {
+      const response = await fetch("https://api.kokorotts.com/v1/audio/speech", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: "kokoro",
+          input: message.content,
+          voice: "af_bella",
+          response_format: "mp3",
+          speed: 1.0
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate speech');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setAudioUrl(url);
+    } catch (error) {
+      console.error('Failed to generate speech:', error);
+    }
+  };
+
   const renderContent = () => {
+    // Check if we have a TTS audio URL
+    if (audioUrl) {
+      return (
+        <>
+          <div className="mt-1 text-sm text-white">
+            {message.content}
+          </div>
+          <div className="mt-2">
+            <AudioPlayer url={audioUrl} />
+          </div>
+        </>
+      );
+    }
+
     // Check if the content is an MP3 link
     if (message.content.trim().toLowerCase().endsWith('.mp3')) {
       const displayText = message.content.length > 60 ? message.content.substring(0, 57) + '...' : message.content;
@@ -172,9 +215,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
             </div>
           )}
           <div className="mt-2">
-            <AudioPlayer 
-              url={message.content}
-            />
+            <AudioPlayer url={message.content} />
           </div>
         </>
       );
@@ -222,19 +263,32 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
           />
 
           {!isThreadParent && (
-            <button
-              onClick={handleThreadClick}
-              className={`inline-flex items-center p-1.5 text-xs font-medium rounded-full ${
-                message.id.startsWith('temp-')
-                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                  : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
-              }`}
-              disabled={message.id.startsWith('temp-')}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-            </button>
+            <>
+              {isAssistantMessage && !message.content.trim().toLowerCase().endsWith('.mp3') ? (
+                <button
+                  onClick={handleTextToSpeech}
+                  className="inline-flex items-center p-1.5 text-xs font-medium rounded-full text-gray-700 bg-gray-100 hover:bg-gray-200"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                  </svg>
+                </button>
+              ) : !isAssistantMessage && (
+                <button
+                  onClick={handleThreadClick}
+                  className={`inline-flex items-center p-1.5 text-xs font-medium rounded-full ${
+                    message.id.startsWith('temp-')
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+                  }`}
+                  disabled={message.id.startsWith('temp-')}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

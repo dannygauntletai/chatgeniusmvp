@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Backend for Slack clone application",
   "main": "dist/app.js",
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "scripts": {
     "start": "node dist/app.js",
     "dev": "nodemon src/app.ts",

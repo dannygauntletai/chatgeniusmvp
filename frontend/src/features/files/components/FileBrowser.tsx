@@ -40,14 +40,6 @@ const getFileIcon = (type: string) => {
   );
 };
 
-const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-};
-
 interface FileBrowserProps {
   selectedFileId?: string;
   channelId?: string;
@@ -179,9 +171,6 @@ export const FileBrowser = ({ selectedFileId, channelId }: FileBrowserProps) => 
                   <div className="mt-2 text-center">
                     <div className="text-sm font-medium text-white truncate w-full max-w-[150px]">
                       {file.name}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-1">
-                      {formatFileSize(file.size)}
                     </div>
                   </div>
                 </div>

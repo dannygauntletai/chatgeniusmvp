@@ -277,6 +277,12 @@ async def initiate_call(
             call_status = twilio_client.calls(call.sid).fetch()
             print(f"Call status: {call_status.status}")
             
+            if call_status.status == 'failed':
+                return CallResponse(
+                    message="Call failed to connect",
+                    call_sid=call.sid
+                )
+                
             if call_status.status in ['completed', 'failed', 'busy', 'no-answer', 'canceled']:
                 # Call has ended, check for recording
                 recordings = twilio_client.recordings.list(call_sid=call.sid)

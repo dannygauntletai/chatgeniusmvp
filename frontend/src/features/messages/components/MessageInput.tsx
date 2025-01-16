@@ -37,7 +37,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           activeChannel.id,
           userId,
           activeChannel.isPrivate ? 'private' : 'public',
-          threadParentId,
+          undefined,
           username || undefined
         );
         
@@ -49,7 +49,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           updatedAt: new Date().toISOString(),
           userId: ASSISTANT_BOT_USER_ID,
           channelId: activeChannel.id,
-          threadId: threadParentId,
           user: {
             id: ASSISTANT_BOT_USER_ID,
             username: 'Assistant'
@@ -61,20 +60,12 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         onOptimisticUpdate?.(optimisticMessage);
         
         try {
-          // Send the actual message
-          if (threadParentId) {
-            await MessageService.createMessage({
-              content: response.response,
-              threadId: threadParentId,
-              userId: ASSISTANT_BOT_USER_ID
-            });
-          } else {
-            await MessageService.createMessage({
-              content: response.response,
-              channelId: activeChannel.id,
-              userId: ASSISTANT_BOT_USER_ID
-            });
-          }
+          // Send the actual message (always to channel, never to thread)
+          await MessageService.createMessage({
+            content: response.response,
+            channelId: activeChannel.id,
+            userId: ASSISTANT_BOT_USER_ID
+          });
         } catch (error) {
           console.error('Failed to send assistant message:', error);
           // Revert optimistic update if message send fails

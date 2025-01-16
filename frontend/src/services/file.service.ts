@@ -12,6 +12,7 @@ interface FileObject {
   name: string;
   url: string;
   type: string;
+  size: number;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -64,18 +65,32 @@ class FileService {
 
   async uploadFile(file: File, channelId?: string): Promise<FileObject> {
     try {
+      console.log(`Starting file upload - Name: ${file.name}, Size: ${file.size} bytes, Type: ${file.type}`);
+      
       const formData = new FormData();
       formData.append('file', file);
       
       // If no channelId provided, get the public bucket ID
       const targetChannelId = channelId || await this.getPublicBucketId();
+      console.log(`Using channel ID: ${targetChannelId}`);
       formData.append('channelId', targetChannelId);
 
       // Use the api service which handles auth
+      console.log('Initiating upload request to server...');
       const response = await api.post('/api/files/upload', formData, true);
+      console.log('File upload successful:', response);
       return response as FileObject;
     } catch (error) {
-      console.error('Error uploading file:', error);
+      console.error('File upload failed with details:', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        error: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        } : error
+      });
       throw error;
     }
   }

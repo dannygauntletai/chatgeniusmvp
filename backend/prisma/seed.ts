@@ -10,8 +10,9 @@ async function main() {
     where: { id: assistantBotId }
   });
 
+  let assistantBot;
   if (!existingBot) {
-    await prisma.user.create({
+    assistantBot = await prisma.user.create({
       data: {
         id: assistantBotId,
         username: 'Assistant',
@@ -21,6 +22,9 @@ async function main() {
         status: 'online'
       }
     });
+    console.log('Created assistant bot:', assistantBot);
+  } else {
+    console.log('Assistant bot already exists:', existingBot);
   }
 
   // Create test user

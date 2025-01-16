@@ -12,6 +12,8 @@ export interface Channel {
   members: {
     id: string;
     username: string;
+    status: string;
+    user_status?: string;
   }[];
   _count?: {
     members: number;
