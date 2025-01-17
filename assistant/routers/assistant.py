@@ -365,12 +365,19 @@ Current conversation metadata:
 - Channel type: {channel_info["type"] if channel_info else channel_type}
 - Current user: @{username} ({user_id})
 
+When using information from the context, always cite the source:
+- For messages: mention the channel name and sender's username (e.g. 'According to @username in #channel...')
+- For documents: mention the document name (e.g. 'According to the document "filename.pdf"...')
+
 Be direct and helpful in your responses. You can reference the channel and user information above when relevant to the conversation.\n\n"""
         
         if retrieve_response.messages:
-            context += "Here are some relevant previous messages that might help with context:\n"
+            context += "Here are some relevant previous messages and documents that might help with context:\n"
             for msg in retrieve_response.messages[:TOP_K]:
-                context += f"{msg.sender_name}: {msg.content}\n"
+                if hasattr(msg, "metadata") and msg.metadata.get("file_name"):
+                    context += f"[From document '{msg.metadata.get('file_name')}' chunk {msg.metadata.get('chunk_index', 'unknown')}]: {msg.content}\n"
+                else:
+                    context += f"[From #{msg.channel_name} by @{msg.sender_name}]: {msg.content}\n"
             context += "\n"
             
         # Truncate context if it's too long
@@ -381,7 +388,10 @@ Be direct and helpful in your responses. You can reference the channel and user 
         completion = await openai_client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": context},
+                {
+                    "role": "system", 
+                    "content": context + "\nWhen referencing information from the context, always cite the source by mentioning the channel and sender (e.g. 'According to @username in #channel...')"
+                },
                 {"role": "user", "content": message}
             ],
             temperature=TEMPERATURE,
@@ -389,6 +399,21 @@ Be direct and helpful in your responses. You can reference the channel and user 
         )
         
         response = completion.choices[0].message.content
+        
+        # Create source metadata
+        sources = [{
+            "channel_name": msg.channel_name,
+            "sender_name": msg.sender_name,
+            "similarity": msg.similarity,
+            "message_id": msg.message_id,
+            "type": "message",
+            # Add document metadata if it exists
+            "document": {
+                "file_name": msg.metadata.get("file_name") if hasattr(msg, "metadata") else None,
+                "file_id": msg.metadata.get("file_id") if hasattr(msg, "metadata") else None,
+                "chunk_index": msg.metadata.get("chunk_index") if hasattr(msg, "metadata") else None
+            } if hasattr(msg, "metadata") and msg.metadata.get("file_name") else None
+        } for msg in retrieve_response.messages]
         
         return AssistantResponse(
             response=response,
@@ -406,7 +431,8 @@ Be direct and helpful in your responses. You can reference the channel and user 
                         "id": user_id,
                         "username": username
                     },
-                    "thread_id": thread_id
+                    "thread_id": thread_id,
+                    "sources": sources
                 }
             )
         )
