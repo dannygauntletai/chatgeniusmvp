@@ -11,8 +11,6 @@ interface FileUploadModalProps {
   channelId: string;
 }
 
-const PUBLIC_FILES_CHANNEL_ID = '319af79e-3d69-4439-83cd-bb9b52f5e0ff';
-
 export const FileUploadModal = ({ isOpen, onClose, channelId }: FileUploadModalProps) => {
   const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -53,9 +51,9 @@ export const FileUploadModal = ({ isOpen, onClose, channelId }: FileUploadModalP
       setIsUploading(true);
       setError(null);
       
-      // Upload files one by one, using the public files channel ID if no channelId provided
+      // Upload files one by one, let backend handle public bucket if no channelId
       await Promise.all(files.map(file => 
-        fileService.uploadFile(file, channelId || PUBLIC_FILES_CHANNEL_ID, user.id)
+        fileService.uploadFile(file, channelId || undefined)
       ));
       
       setFiles([]);
