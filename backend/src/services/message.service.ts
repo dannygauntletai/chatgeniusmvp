@@ -1,6 +1,5 @@
 import { Message } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { AIResponseService } from './ai-response.service';
 import { io } from '../app';
 import { AssistantService } from './assistant.service';
 
@@ -48,8 +47,6 @@ export class MessageService {
     console.log('\n=== MESSAGE CREATION STARTED ===');
     console.log('Creating message with data:', JSON.stringify(data, null, 2));
 
-    console.log(data);
-    
     if (!data.providedUserId && !data.userId) {
       console.error("Either providedUserId or userId must be provided");
     }
@@ -170,7 +167,7 @@ export class MessageService {
         
         if (recipientId) {
           console.log('Got valid recipient ID, checking if should generate response...');
-          const shouldRespond = await AIResponseService.shouldGenerateResponse(message.channel, recipientId);
+          const shouldRespond = await assistantService.shouldGenerateResponse(message.channel, recipientId);
           console.log('shouldGenerateResponse returned:', shouldRespond);
           
           if (shouldRespond) {
@@ -182,26 +179,10 @@ export class MessageService {
             console.log('Recipient info:', recipient);
 
             if (recipient) {
-              // Get previous messages from the offline user
-              const userMessages = await prisma.message.findMany({
-                where: {
-                  channelId: message.channelId,
-                  userId: recipientId,
-                },
-                orderBy: {
-                  createdAt: 'desc',
-                },
-                take: 10, // Get last 10 messages
-                include: {
-                  user: true,
-                }
-              });
-              console.log('Found previous messages from user:', userMessages.length);
-
-              console.log('Generating AI response...');
+              console.log('Generating offline response...');
               // Generate response using the user's message history
-              const aiResponse = await AIResponseService.generateResponse(message, recipient, message.channel);
-              console.log('Generated AI response:', aiResponse);
+              const aiResponse = await assistantService.generateOfflineResponse(message, recipient, message.channel);
+              console.log('Generated offline response:', aiResponse);
               
               if (aiResponse) {
                 // Create and emit the AI response message using the offline user's ID

@@ -207,6 +207,12 @@ class VectorUpdateRequest(BaseModel):
             raise ValueError(f'channel_type must be one of: {valid_types}')
         return v
 
+class UserMessagesRequest(BaseModel):
+    user_id: str
+    top_k: int = 100
+    query: Optional[str] = ""  # Optional query for filtering messages
+    sender_name: Optional[str] = None  # Optional sender name for additional filtering
+
 # Initialize managers and services
 vector_store_manager = VectorStoreManager()
 query_analyzer = QueryAnalyzer(openai_client)
@@ -341,6 +347,7 @@ async def initialize_vector_db():
                     "channel_type": "private" if msg.channel.isPrivate else "public",
                     "sender_name": msg.user.username,
                     "thread_id": str(msg.threadId) if msg.threadId else "",
+                    "user_id": str(msg.userId)
                 }
             )
             documents.append(doc)
@@ -429,4 +436,83 @@ async def get_index_stats():
             
     except Exception as e:
         logging.error(f"Error getting index stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/retrieve/channel", response_model=RetrieveResponse)
+async def retrieve_similar_channel_messages(
+    query: str = Body(...),
+    channel_id: str = Body(...),
+    top_k: int = Body(10),
+    threshold: float = Body(0.3)
+):
+    """Retrieve similar messages from a specific channel using vector similarity search."""
+    try:
+        with tracing_v2_enabled():
+            logging.info(f"Retrieving channel messages for query: {query}")
+            
+            # Build filter for channel-specific search
+            filter_dict = {
+                "channel_id": channel_id
+            }
+            
+            # Search for relevant content
+            chat_results = await vector_store_manager.search_chat_messages(
+                query,
+                top_k,
+                filter_dict
+            )
+            
+            # Process results
+            messages = []
+            for doc, score in chat_results:
+                if score < threshold:
+                    continue
+                if msg := ResultFormatter.format_chat_result(doc, score):
+                    messages.append(msg)
+            
+            return RetrieveResponse(
+                query=query,
+                messages=messages
+            )
+                
+    except Exception as e:
+        logging.error(f"Error retrieving channel messages: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/retrieve/user", response_model=RetrieveResponse)
+async def retrieve_similar_user_messages(request: UserMessagesRequest):
+    """Retrieve messages from a specific user."""
+    try:
+        with tracing_v2_enabled():
+            logging.info(f"Retrieving messages for user: {request.user_id}")
+            
+            # Build filter for user-specific search
+            filter_dict = {
+                "user_id": request.user_id
+            }
+            
+            # Add sender name filter if provided
+            if request.sender_name:
+                filter_dict["sender_name"] = request.sender_name
+            
+            # Search for content - use empty query if none provided
+            chat_results = await vector_store_manager.search_chat_messages(
+                request.query,  # Use provided query or empty string
+                request.top_k,
+                filter_dict
+            )
+            
+            # Process results - don't filter by threshold since we want all messages
+            messages = []
+            for doc, score in chat_results:
+                if msg := ResultFormatter.format_chat_result(doc, score):
+                    messages.append(msg)
+            
+            return RetrieveResponse(
+                query=request.query,
+                messages=messages
+            )
+                
+    except Exception as e:
+        logging.error(f"Error retrieving user messages: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 

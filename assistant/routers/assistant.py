@@ -10,7 +10,7 @@ from langchain_core.documents import Document
 from langchain_pinecone import PineconeVectorStore
 import json
 from models import AssistantResponse, Message, RetrieveRequest, RichContent, RetrieveResponse
-from routers.vector import retrieve_similar_messages
+from routers.vector import retrieve_similar_user_messages, retrieve_similar_channel_messages, UserMessagesRequest
 from langsmith import Client
 from langchain_core.tracers.context import tracing_v2_enabled
 from utils import get_prisma
@@ -18,6 +18,7 @@ from clients.phone_client import PhoneServiceClient
 import logging
 from datetime import datetime
 import asyncio
+from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv()
@@ -228,6 +229,50 @@ Important: Never acknowledge being AI, never apologize, never explain. Simply BE
                 logging.error(f"Traceback: {''.join(traceback.format_tb(e.__traceback__))}")
             raise
 
+class FilterBuilder:
+    @staticmethod
+    def build_filter(channel_type: str, channel_id: str = None, target_username: str = None, user_id: str = None) -> Dict:
+        """Build filter dictionary based on channel type and user access."""
+        filter_dict = {}
+        
+        if channel_type == "user_query":
+            # For user-specific queries, only get messages from that user
+            filter_dict = {
+                "user_id": user_id
+            }
+        elif channel_type == "assistant":
+            filter_dict = {
+                "$or": [
+                    {"channel_type": "public"},
+                    {"channel_type": "private"}
+                ]
+            }
+        elif channel_type == "private":
+            filter_dict = {
+                "$or": [
+                    {"channel_type": "public"},
+                    {"channel_id": channel_id}
+                ]
+            }
+        else:
+            filter_dict = {
+                "channel_type": "public"
+            }
+
+        if target_username and channel_type != "user_query":
+            if "$or" in filter_dict:
+                for condition in filter_dict["$or"]:
+                    condition["sender_name"] = target_username
+            else:
+                filter_dict["sender_name"] = target_username
+
+        return filter_dict
+
+class OfflineRequest(BaseModel):
+    query: str
+    sender_name: Optional[str] = None
+    limit: int = 100
+
 # Initialize components
 openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 assistant_manager = AssistantManager(openai_client)
@@ -423,4 +468,69 @@ Important:
 
     except Exception as e:
         logging.error(f"Error in summarize endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)) 
+
+@router.post("/offline/{user_id}", response_model=AssistantResponse)
+async def get_offline_user_messages(
+    user_id: str,
+    request: OfflineRequest
+):
+    """Retrieve and analyze messages from a specific offline user."""
+    try:
+        # Get messages from vector store with user-specific filter
+        print("user_id", user_id)
+        retrieve_response = await retrieve_similar_user_messages(
+            UserMessagesRequest(user_id=user_id, top_k=request.limit)
+        )
+
+        print(retrieve_response)
+
+        if not retrieve_response.messages:
+            return AssistantResponse(
+                response=f"No messages found for this user.",
+                context_used=[],
+                confidence=0.0
+            )
+
+        # Build context from messages
+        context = await assistant_manager.build_context(retrieve_response.messages)
+        
+        # Get user info
+        prisma = get_prisma()
+        user = await prisma.user.find_unique(
+            where={"id": user_id}
+        )
+        username = user.username if user else "Unknown User"
+        
+        # Generate analysis/response
+        completion = await openai_client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"""You are analyzing messages from user {username}. Your task is to provide one response to {request.query} that sounds like them based on their message history.
+
+Here is their message history:
+{context}
+
+Important:
+1. Be specific and reference actual messages when possible
+2. Focus on patterns, preferences, and communication style
+3. If answering a specific question, cite relevant messages
+4. Don't apologize or mention being an AI - just provide the information
+5. If the context seems insufficient, mention what additional information would be helpful"""
+                }
+            ],
+            temperature=0.3,  # Lower temperature for more factual responses
+            max_tokens=MAX_TOKENS
+        )
+
+        return AssistantResponse(
+            response=completion.choices[0].message.content,
+            context_used=retrieve_response.messages,
+            confidence=0.9
+        )
+
+    except Exception as e:
+        logging.error(f"Error in offline user endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 

@@ -1,4 +1,4 @@
-import { Channel, Message } from '@prisma/client';
+import { Channel, Message, User } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 
 export class AssistantService {
@@ -7,6 +7,81 @@ export class AssistantService {
   private getChannelType(channel: Channel): string {
     if (channel.isPrivate) return 'private';
     return 'public';
+  }
+
+  async shouldGenerateResponse(channel: Channel, recipientId: string): Promise<boolean> {
+    console.log('\n=== ASSISTANT SERVICE - shouldGenerateResponse ===');
+    console.log('Channel:', JSON.stringify(channel, null, 2));
+    console.log('RecipientId:', recipientId);
+
+    // Only generate responses for DM channels
+    if (!channel.name.startsWith('dm-')) {
+      console.log('Not a DM channel, skipping AI response');
+      return false;
+    }
+
+    console.log('Looking up recipient in database...');
+    // Get recipient's status
+    const recipient = await prisma.user.findUnique({
+      where: { id: recipientId }
+    });
+
+    console.log('Recipient from database:', JSON.stringify(recipient, null, 2));
+    console.log('Recipient status:', recipient?.status);
+    console.log('Should generate response:', recipient?.status === 'offline');
+
+    // Generate response if user is offline
+    return recipient?.status === 'offline';
+  }
+
+  async generateOfflineResponse(message: Message, offlineUser: User, channel: Channel): Promise<string> {
+    console.log('\n=== ASSISTANT SERVICE - generateOfflineResponse ===');
+    console.log('Generating offline response for message:', message.id);
+    console.log('Offline user:', offlineUser.username);
+    console.log('Channel:', channel.name);
+
+    try {
+      // Get the sender's info for context
+      const sender = await prisma.user.findUnique({
+        where: { id: message.userId },
+        select: {
+          username: true
+        }
+      });
+
+      // For DM responses, use the offline user endpoint
+      console.log('Using offline user endpoint for DM response');
+      console.log('Offline user ID:', offlineUser.id);
+      
+      const response = await fetch(`${this.assistantUrl}/assistant/offline/${offlineUser.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: message.content,
+          sender_name: sender?.username || 'Unknown',
+          limit: 100
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Assistant service error:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+        throw new Error(`Assistant service error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('Response data:', data);
+      return data.response;
+    } catch (error) {
+      console.error('Error generating offline response:', error);
+      throw error;
+    }
   }
 
   async getAssistantResponse(message: Message, channel: Channel, userId: string): Promise<string> {
@@ -25,14 +100,16 @@ export class AssistantService {
 
     try {
       // If this is a channel query (summarize, etc.)
-      const isChannelQuery = message.content.toLowerCase().includes('summarize') || 
+      const isChannelQuery = message.content.toLowerCase().includes('@assistant') && (
+        message.content.toLowerCase().includes('summarize') || 
         message.content.toLowerCase().includes('summary') ||
         message.content.toLowerCase().includes('what') ||
         message.content.toLowerCase().includes('who') ||
         message.content.toLowerCase().includes('when') ||
         message.content.toLowerCase().includes('where') ||
         message.content.toLowerCase().includes('why') ||
-        message.content.toLowerCase().includes('how');
+        message.content.toLowerCase().includes('how')
+      );
 
       console.log('Is channel query:', isChannelQuery);
       
