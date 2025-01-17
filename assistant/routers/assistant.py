@@ -329,7 +329,7 @@ async def chat(
                     type="call",
                     content="Call initiated",
                     metadata={
-                        "call_sid": call_response.call_sid,
+                        "call_sid": call_response.get("call_sid"),
                         "phone_number": call_details["phone_number"],
                         "message": call_details["message"]
                     }
@@ -354,8 +354,8 @@ async def chat(
             latest_msg = retrieve_response.messages[0]
             channel_info = {
                 "name": latest_msg.channel_name,
-                "id": latest_msg.channel_id,
-                "type": latest_msg.channel_type
+                "id": channel_id,
+                "type": channel_type
             }
 
         context = f"""You are ChatGenius, a helpful AI assistant. You help users by providing accurate and relevant information based on the conversation history.
