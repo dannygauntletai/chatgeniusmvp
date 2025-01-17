@@ -74,7 +74,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: VITE_API_URL
-        value: https://chatgenius-backend.onrender.com
+        value: https://chatgeniusmvp-backend.onrender.com
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL
@@ -88,7 +88,7 @@ services:
       - key: TWILIO_PHONE_NUMBER
         sync: false
       - key: FRONTEND_URL
-        value: https://chatgenius.fyi
+        value: https://chatgeniusmvp-frontend.onrender.com
       - key: LANGCHAIN_API_KEY
         sync: false
       - key: LANGCHAIN_TRACING_V2

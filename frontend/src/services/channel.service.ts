@@ -11,6 +11,18 @@ interface ChannelResponse {
   };
 }
 
+interface ChannelJoinedEvent {
+  channelId: string;
+}
+
+interface ChannelLeftEvent {
+  channelId: string;
+}
+
+interface ChannelErrorEvent {
+  error: string;
+}
+
 // Cache configuration
 const CACHE_DURATION = 30000; // 30 seconds
 let channelCache: {
@@ -70,13 +82,67 @@ export class ChannelService {
 
   static async joinChannel(channelId: string): Promise<void> {
     try {
+      // First, join the channel in the database
       await api.post(`/api/channels/${channelId}/join`, {});
-      socket.emit('channel:join', channelId);
-      this.clearCache(); // Clear cache when channel membership changes
+      
+      // Create a promise that resolves when the socket join is acknowledged
+      const joinPromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          socket.off('channel:joined');
+          socket.off('channel:error');
+          reject(new Error('Channel join timeout'));
+        }, 5000);
+
+        // Listen for join acknowledgment
+        socket.once('channel:joined', ({ channelId: joinedId }: ChannelJoinedEvent) => {
+          if (joinedId === channelId) {
+            clearTimeout(timeout);
+            resolve();
+          }
+        });
+
+        // Listen for errors
+        socket.once('channel:error', ({ error }: ChannelErrorEvent) => {
+          clearTimeout(timeout);
+          reject(new Error(error));
+        });
+
+        // Emit join event
+        socket.emit('channel:join', channelId);
+      });
+
+      // Wait for socket join to complete
+      await joinPromise;
+      
+      // Clear cache when channel membership changes
+      this.clearCache();
     } catch (error: any) {
       // If we're already a member, just join the socket room
       if (error.message?.includes('status: 400')) {
-        socket.emit('channel:join', channelId);
+        // Still need to wait for socket join
+        const joinPromise = new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            socket.off('channel:joined');
+            socket.off('channel:error');
+            reject(new Error('Channel join timeout'));
+          }, 5000);
+
+          socket.once('channel:joined', ({ channelId: joinedId }: ChannelJoinedEvent) => {
+            if (joinedId === channelId) {
+              clearTimeout(timeout);
+              resolve();
+            }
+          });
+
+          socket.once('channel:error', ({ error }: ChannelErrorEvent) => {
+            clearTimeout(timeout);
+            reject(new Error(error));
+          });
+
+          socket.emit('channel:join', channelId);
+        });
+
+        await joinPromise;
         return;
       }
       throw error;
@@ -90,16 +156,34 @@ export class ChannelService {
 
   static async leaveChannel(channelId: string): Promise<void> {
     try {
-      console.log('Attempting to leave channel:', channelId);
-      await api.post(`/api/channels/${channelId}/leave`, {});
-      console.log('Successfully left channel:', channelId);
-      this.clearCache(); // Clear cache when channel membership changes
+      // Create a promise that resolves when the socket leave is acknowledged
+      const leavePromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          socket.off('channel:left');
+          socket.off('channel:error');
+          reject(new Error('Channel leave timeout'));
+        }, 5000);
+
+        socket.once('channel:left', ({ channelId: leftId }: ChannelLeftEvent) => {
+          if (leftId === channelId) {
+            clearTimeout(timeout);
+            resolve();
+          }
+        });
+
+        socket.once('channel:error', ({ error }: ChannelErrorEvent) => {
+          clearTimeout(timeout);
+          reject(new Error(error));
+        });
+
+        socket.emit('channel:leave', channelId);
+      });
+
+      await leavePromise;
+      this.clearCache();
     } catch (error) {
-      console.error('Failed to leave channel:', error);
-      // Ignore 400 errors as they might indicate user is not in channel
-      if (error instanceof Error && !error.message.includes('status: 400')) {
-        throw error;
-      }
+      console.error('Error leaving channel:', error);
+      throw error;
     }
   }
 

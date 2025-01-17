@@ -15,6 +15,19 @@ import { UserInviteModal } from '../../users/components/UserInviteModal';
 import { ChannelMembersModal } from '../../channels/components/ChannelMembersModal';
 import { MessageInput } from './MessageInput';
 
+// Socket event types
+interface ChannelJoinedEvent {
+  channelId: string;
+}
+
+interface ChannelLeftEvent {
+  channelId: string;
+}
+
+interface ChannelErrorEvent {
+  error: string;
+}
+
 const ChannelHeader = ({ name, isPrivate, channelId }: { name: string; isPrivate: boolean; channelId: string }) => {
   const [userStatus, setUserStatus] = useState<string | null>(null);
   const [userEmoji, setUserEmoji] = useState<string>('😊');
@@ -174,28 +187,58 @@ const MessageListContent = () => {
     let mounted = true;
     setLoading(true);
 
-    // Join channel room and wait for connection
-    const joinChannel = () => {
-      return new Promise<void>((resolve) => {
+    console.log('Setting up socket listeners for channel:', activeChannel.id);
+    console.log('Socket connected?', socket.connected);
+
+    // Join channel room and wait for acknowledgment
+    const joinChannel = async () => {
+      return new Promise<void>((resolve, reject) => {
+        console.log('Attempting to join channel:', activeChannel.id);
+        
+        const timeout = setTimeout(() => {
+          console.log('Channel join timeout');
+          socket.off('channel:joined');
+          socket.off('channel:error');
+          reject(new Error('Channel join timeout'));
+        }, 5000);
+
+        socket.once('channel:joined', ({ channelId }: ChannelJoinedEvent) => {
+          console.log('Received channel:joined event for channel:', channelId);
+          if (channelId === activeChannel.id) {
+            clearTimeout(timeout);
+            resolve();
+          }
+        });
+
+        socket.once('channel:error', ({ error }: ChannelErrorEvent) => {
+          console.log('Received channel:error event:', error);
+          clearTimeout(timeout);
+          reject(new Error(error));
+        });
+
+        console.log('Emitting channel:join event');
         socket.emit('channel:join', activeChannel.id);
-        // Wait a brief moment to ensure we're connected
-        setTimeout(resolve, 100);
       });
     };
 
     // Load messages after joining channel
     const loadMessages = async () => {
       try {
+        console.log('Starting loadMessages');
+        // Wait for channel join acknowledgment
         await joinChannel();
+        console.log('Successfully joined channel');
         if (!mounted) return;
 
         const data = await MessageService.getChannelMessages(activeChannel.id);
+        console.log('Loaded initial messages:', data.length);
         if (!mounted) return;
 
         setMessages(data.filter(message => !message.threadId));
         setError(null);
         messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
       } catch (err) {
+        console.error('Error loading messages:', err);
         if (mounted) {
           setError('Failed to load messages');
         }
@@ -209,46 +252,80 @@ const MessageListContent = () => {
     loadMessages();
 
     const handleNewMessage = (message: Message) => {
+      console.log('🔔 message:created event received:', {
+        messageId: message.id,
+        content: message.content,
+        channelId: message.channelId,
+        currentChannel: activeChannel?.id,
+        isThread: !!message.threadId
+      });
+
+      if (!mounted) {
+        console.log('❌ Component not mounted, ignoring message');
+        return;
+      }
+      
       if (message.channelId === activeChannel.id && !message.threadId) {
+        console.log('✅ Message matches current channel, updating state');
         setMessages(prev => {
-          const tempMessageIndex = prev.findIndex(m => 
-            m.id.startsWith('temp-') && m.content === message.content
-          );
-          
-          if (tempMessageIndex === -1) {
-            return [...prev, message];
+          // Check for duplicates
+          const isDuplicate = prev.some(m => m.id === message.id);
+          if (isDuplicate) {
+            console.log('⚠️ Duplicate message detected, skipping update');
+            return prev;
           }
-          
-          const newMessages = [...prev];
-          const tempMessage = newMessages[tempMessageIndex];
-          
-          // Preserve assistant user information
-          if (tempMessage.userId === 'assistant-bot') {
-            newMessages[tempMessageIndex] = {
-              ...message,
-              userId: 'assistant-bot',
-              user: {
-                id: 'assistant-bot',
-                username: 'Assistant'
-              }
-            };
-          } else {
-            newMessages[tempMessageIndex] = message;
-          }
-          
-          return newMessages;
+          console.log('✨ Adding new message to state');
+          return [...prev, message];
         });
-        
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        console.log('❌ Message filtered out:', {
+          wrongChannel: message.channelId !== activeChannel.id,
+          isThread: !!message.threadId,
+          messageChannel: message.channelId,
+          currentChannel: activeChannel?.id
+        });
       }
     };
 
+    // Listen for real-time message updates
+    console.log('Setting up message:created listener');
     socket.on('message:created', handleNewMessage);
 
     return () => {
+      console.log('Cleaning up socket listeners');
       mounted = false;
       socket.off('message:created', handleNewMessage);
-      socket.emit('channel:leave', activeChannel.id);
+      
+      // Leave channel room and wait for acknowledgment
+      console.log('Leaving channel:', activeChannel.id);
+      const leavePromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          socket.off('channel:left');
+          socket.off('channel:error');
+          reject(new Error('Channel leave timeout'));
+        }, 5000);
+
+        socket.once('channel:left', ({ channelId }: ChannelLeftEvent) => {
+          console.log('Received channel:left event for channel:', channelId);
+          if (channelId === activeChannel.id) {
+            clearTimeout(timeout);
+            resolve();
+          }
+        });
+
+        socket.once('channel:error', ({ error }: ChannelErrorEvent) => {
+          console.log('Received channel:error event:', error);
+          clearTimeout(timeout);
+          reject(new Error(error));
+        });
+
+        socket.emit('channel:leave', activeChannel.id);
+      });
+
+      // Handle leave promise
+      leavePromise.catch(error => {
+        console.error('Error leaving channel:', error);
+      });
     };
   }, [activeChannel?.id]);
 

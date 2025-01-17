@@ -17,7 +17,7 @@ class InitializeResponse(BaseModel):
 
 class RetrieveRequest(BaseModel):
     query: str
-    user_id: str
+    user_id: Optional[str] = None
     channel_id: str
     channel_type: str
     top_k: int = 20

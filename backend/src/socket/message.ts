@@ -12,12 +12,11 @@ export const handleMessageEvents = (socket: Socket) => {
       // Create the message first
       const message = await messageService.create(data);
       
-      // Emit the original message immediately
-      socket.to(message.channelId).emit('message:created', message);
-      socket.emit('message:created', message);
-      
       // Check if message mentions assistant
       if (message.content.toLowerCase().includes('@assistant')) {
+        console.log('\n=== ASSISTANT MENTION DETECTED ===');
+        console.log('Message content:', message.content);
+        
         // Send typing indicator
         socket.to(message.channelId).emit('user:typing', {
           channelId: message.channelId,
@@ -29,50 +28,65 @@ export const handleMessageEvents = (socket: Socket) => {
           where: { id: message.channelId }
         });
         
-        if (!channel) return;
-
-        try {
-          // Get assistant response
-          const assistantResponse = await assistantService.getAssistantResponse(
-            message,
-            channel,
-            socket.data.userId
-          );
-
-          // Create assistant's response message
-          const botMessage = await messageService.create({
-            content: assistantResponse,
-            channelId: message.channelId,
-            userId: process.env.ASSISTANT_BOT_USER_ID!, // Bot user ID from env
-            threadId: message.threadId || undefined // Maintain thread context if it exists
-          });
-
-          // Stop typing indicator
+        if (!channel) {
+          console.log('Channel not found:', message.channelId);
           socket.to(message.channelId).emit('user:typing', {
             channelId: message.channelId,
             userId: process.env.ASSISTANT_BOT_USER_ID,
             typing: false
           });
+          return;
+        }
 
-          // Emit the bot's message to all users in the channel
-          socket.to(message.channelId).emit('message:created', botMessage);
-          socket.emit('message:created', botMessage);
+        console.log('Channel found:', {
+          id: channel.id,
+          name: channel.name,
+          type: channel.isPrivate ? 'private' : 'public'
+        });
+
+        try {
+          console.log('Calling getAssistantResponse with:', {
+            messageId: message.id,
+            channelId: channel.id,
+            userId: socket.data.userId
+          });
+
+          // Get assistant response (handles both normal queries and channel summaries)
+          const response = await assistantService.getAssistantResponse(
+            message,
+            channel,
+            socket.data.userId
+          );
+
+          console.log('Got response from assistant service:', response);
+
+          // Create assistant's response message and let MessageService handle the emission
+          await messageService.create({
+            content: response,
+            channelId: message.channelId,
+            userId: process.env.ASSISTANT_BOT_USER_ID!, // Bot user ID from env
+            threadId: message.threadId || undefined // Maintain thread context if it exists
+          });
         } catch (error) {
-          // If assistant fails, send an error message
-          const errorMessage = await messageService.create({
+          console.error('Error getting assistant response:', error);
+          // Create error message
+          await messageService.create({
             content: "I apologize, but I'm having trouble processing your request at the moment. Please try again later.",
             channelId: message.channelId,
             userId: process.env.ASSISTANT_BOT_USER_ID!,
-            threadId: message.threadId || ""
+            threadId: message.threadId || undefined
           });
-
-          socket.to(message.channelId).emit('message:created', errorMessage);
-          socket.emit('message:created', errorMessage);
+        } finally {
+          // Always stop typing indicator
+          socket.to(message.channelId).emit('user:typing', {
+            channelId: message.channelId,
+            userId: process.env.ASSISTANT_BOT_USER_ID,
+            typing: false
+          });
         }
       }
     } catch (error) {
-      console.error('Message handling error:', error);
-      socket.emit('message:error', { error: 'Failed to process message' });
+      console.error('Error in message:create handler:', error);
     }
   });
 

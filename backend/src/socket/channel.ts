@@ -5,8 +5,10 @@ export const handleChannelEvents = (socket: Socket) => {
     try {
       await socket.join(channelId);
       console.log(`User joined channel: ${channelId}`);
+      socket.emit('channel:joined', { channelId });
     } catch (error) {
       console.error('Error joining channel:', error);
+      socket.emit('channel:error', { error: 'Failed to join channel' });
     }
   });
 
@@ -14,8 +16,10 @@ export const handleChannelEvents = (socket: Socket) => {
     try {
       await socket.leave(channelId);
       console.log(`User left channel: ${channelId}`);
+      socket.emit('channel:left', { channelId });
     } catch (error) {
       console.error('Error leaving channel:', error);
+      socket.emit('channel:error', { error: 'Failed to leave channel' });
     }
   });
 }; 
