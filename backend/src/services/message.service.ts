@@ -47,14 +47,13 @@ export class MessageService {
     console.log('\n=== MESSAGE CREATION STARTED ===');
     console.log('Creating message with data:', JSON.stringify(data, null, 2));
 
-    if (!data.providedUserId && !data.userId) {
-      console.error("Either providedUserId or userId must be provided");
-    }
+    // Default to assistant bot ID if no user ID is provided
+    const userId = data.providedUserId || data.userId || process.env.ASSISTANT_BOT_USER_ID!;
 
     const message = await prisma.message.create({
       data: {
         content: data.content,
-        userId: data.providedUserId || data.userId!,
+        userId,
         channelId: data.channelId,
         threadId: data.threadId
       },
@@ -135,11 +134,11 @@ export class MessageService {
         });
       } catch (error) {
         console.error('Error getting assistant response:', error);
-        // Create error message
+        // Create error message with explicit assistant user ID
         await this.create({
           content: "I apologize, but I'm having trouble processing your request at the moment. Please try again later.",
           channelId: message.channelId,
-          userId: process.env.ASSISTANT_BOT_USER_ID!,
+          providedUserId: process.env.ASSISTANT_BOT_USER_ID!,  // Explicitly use providedUserId
           threadId: message.threadId || undefined
         });
       } finally {
