@@ -364,7 +364,6 @@ Current conversation metadata:
 - Channel: #{channel_info["name"] if channel_info else 'unknown'} ({channel_id})
 - Channel type: {channel_info["type"] if channel_info else channel_type}
 - Current user: @{username} ({user_id})
-- Thread: {'In a thread' if thread_id else 'Not in a thread'}
 
 Be direct and helpful in your responses. You can reference the channel and user information above when relevant to the conversation.\n\n"""
         
