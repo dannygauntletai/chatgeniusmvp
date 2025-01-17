@@ -119,7 +119,7 @@ export class MessageService {
 
         // Get assistant response (handles both normal queries and channel summaries)
         const response = await assistantService.getAssistantResponse(
-          message,
+          message.content,
           channel,
           message.userId
         );

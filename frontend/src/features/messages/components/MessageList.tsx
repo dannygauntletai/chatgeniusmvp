@@ -169,15 +169,6 @@ const MessageListContent = () => {
     }
   }, [loading, activeChannel?.id, messages.length]);
 
-  const handleOptimisticUpdate = (message: Message) => {
-    setMessages(prev => [...prev, message]);
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-  };
-
-  const handleOptimisticRevert = (messageId: string) => {
-    setMessages(prev => prev.filter(m => m.id !== messageId));
-  };
-
   useEffect(() => {
     if (!activeChannel) {
       setMessages([]);
@@ -365,10 +356,7 @@ const MessageListContent = () => {
           )}
         </div>
         <div className="absolute bottom-0 left-0 right-0">
-          <MessageInput 
-            onOptimisticUpdate={handleOptimisticUpdate}
-            onOptimisticRevert={handleOptimisticRevert}
-          />
+          <MessageInput />
         </div>
       </div>
       {isThreadOpen && activeThreadMessage && (

@@ -301,89 +301,122 @@ async def chat(
     channel_id: str = Body(...),
     user_id: str = Body(...),
     channel_type: str = Body(...),
-    username: str = Body(...),
     thread_id: Optional[str] = Body(None),
-    message_history: Optional[List[Dict[str, Any]]] = Body(None),
-    persona: Optional[Dict[str, Any]] = Body(None)
+    username: str = Body(...)
 ):
-    """Process a chat message and generate a response."""
+    """Generate a response to a chat message."""
     try:
-        with tracing_v2_enabled():
-            # First check if this is a phone call request
-            try:
-                is_call_request, call_details = await assistant_manager.phone_client.extract_call_details(
-                    message=message,
-                    context={
-                        'channel_id': channel_id,
-                        'user_id': user_id
+        # Check if this is a phone call request
+        is_call, call_details = await assistant_manager.phone_client.extract_call_details(
+            message,
+            {"channel_id": channel_id, "user_id": user_id}
+        )
+        
+        if is_call:
+            # Handle phone call
+            call_response = await assistant_manager.phone_client.make_call(
+                call_details["phone_number"],
+                call_details["message"],
+                channel_id=channel_id,
+                user_id=user_id,
+                thread_id=thread_id
+            )
+            return AssistantResponse(
+                response="I'll make that call for you right away.",
+                context_used=[],
+                confidence=1.0,
+                rich_content=RichContent(
+                    type="call",
+                    content="Call initiated",
+                    metadata={
+                        "call_sid": call_response.call_sid,
+                        "phone_number": call_details["phone_number"],
+                        "message": call_details["message"]
                     }
                 )
-                
-                if is_call_request and call_details:
-                    # Initiate the call
-                    call_response = await assistant_manager.phone_client.make_call(
-                        to_number=call_details['phone_number'],
-                        message=call_details['message'],
-                        channel_id=channel_id,
-                        user_id=user_id,
-                        thread_id=thread_id
-                    )
-                    
-                    return AssistantResponse(
-                        response=f"I'm initiating a call to {call_details['phone_number']}. {call_details['message']}",
-                        context_used=[],
-                        confidence=0.9
-                    )
-            except Exception as e:
-                logging.error(f"Error checking for phone call: {str(e)}")
-                # Continue with normal message processing if phone call check fails
-                pass
+            )
 
-            # If this is a DM with persona info, generate an impersonated response
-            if channel_type == 'DM' and persona and persona.get('should_analyze_style'):
-                # Get the user's messages
-                user_messages = [msg for msg in message_history if msg['role'] == 'user']
-                
-                # Analyze the user's style
-                style_description = await assistant_manager.analyze_user_style(user_messages)
-                
-                # Generate response as the user
-                response = await assistant_manager.generate_impersonated_response(
-                    message=message,
-                    username=persona['username'],
-                    style_description=style_description,
-                    recent_messages=message_history[-5:]  # Last 5 messages for context
-                )
-                
-                return AssistantResponse(
-                    response=response,
-                    context_used=[],  # No need for context in impersonation
-                    confidence=0.9
-                )
-            
-            # For non-impersonation cases, use retrieve_similar_messages to search across all content
-            request = RetrieveRequest(
+        # Get similar messages for context
+        retrieve_response = await retrieve_similar_messages(
+            RetrieveRequest(
                 query=message,
                 channel_id=channel_id,
-                user_id=ASSISTANT_BOT_USER_ID,
+                user_id=user_id,
                 channel_type=channel_type,
                 top_k=TOP_K,
                 threshold=SIMILARITY_THRESHOLD
             )
+        )
 
-            retrieve_response = await retrieve_similar_messages(request)
-            similar_messages = retrieve_response.messages
-            context = await assistant_manager.build_context(similar_messages)
-            response = await assistant_manager.generate_response(username, message, context)
+        # Build context with metadata from the most recent relevant message
+        channel_info = None
+        if retrieve_response.messages:
+            latest_msg = retrieve_response.messages[0]
+            channel_info = {
+                "name": latest_msg.channel_name,
+                "id": latest_msg.channel_id,
+                "type": latest_msg.channel_type
+            }
+
+        context = f"""You are ChatGenius, a helpful AI assistant. You help users by providing accurate and relevant information based on the conversation history.
+
+Current conversation metadata:
+- Channel: #{channel_info["name"] if channel_info else 'unknown'} ({channel_id})
+- Channel type: {channel_info["type"] if channel_info else channel_type}
+- Current user: @{username} ({user_id})
+- Thread: {'In a thread' if thread_id else 'Not in a thread'}
+
+Be direct and helpful in your responses. You can reference the channel and user information above when relevant to the conversation.\n\n"""
+        
+        if retrieve_response.messages:
+            context += "Here are some relevant previous messages that might help with context:\n"
+            for msg in retrieve_response.messages[:TOP_K]:
+                context += f"{msg.sender_name}: {msg.content}\n"
+            context += "\n"
             
-            return AssistantResponse(
-                response=response,
-                context_used=similar_messages,
-                confidence=0.9
+        # Truncate context if it's too long
+        if len(context) > MAX_CONTEXT_TOKENS * 4:
+            context = context[:MAX_CONTEXT_TOKENS * 4] + "...\n[Context truncated for length]"
+        
+        # Generate response
+        completion = await openai_client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": context},
+                {"role": "user", "content": message}
+            ],
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS
+        )
+        
+        response = completion.choices[0].message.content
+        
+        return AssistantResponse(
+            response=response,
+            context_used=retrieve_response.messages,
+            confidence=0.9,
+            rich_content=RichContent(
+                type="chat",
+                content=response,
+                metadata={
+                    "channel": channel_info or {
+                        "id": channel_id,
+                        "type": channel_type
+                    },
+                    "user": {
+                        "id": user_id,
+                        "username": username
+                    },
+                    "thread_id": thread_id
+                }
             )
-            
+        )
+        
     except Exception as e:
         logging.error(f"Error in chat endpoint: {str(e)}")
+        if hasattr(e, '__traceback__'):
+            import traceback
+            logging.error(f"Traceback: {''.join(traceback.format_tb(e.__traceback__))}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/call-status")

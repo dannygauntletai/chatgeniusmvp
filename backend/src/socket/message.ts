@@ -53,7 +53,7 @@ export const handleMessageEvents = (socket: Socket) => {
 
           // Get assistant response (handles both normal queries and channel summaries)
           const response = await assistantService.getAssistantResponse(
-            message,
+            message.content,
             channel,
             socket.data.userId
           );

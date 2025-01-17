@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { Message } from '../types/message.types';
 import { formatRelativeTime } from '../../../utils/date';
 import { useThread } from '../../threads/context';
@@ -193,7 +194,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
       return (
         <>
           <div className="mt-1 text-sm text-white">
-            {message.content}
+            <ReactMarkdown>{message.content}</ReactMarkdown>
           </div>
           <div className="mt-2">
             <AudioPlayer url={audioUrl} />
@@ -222,8 +223,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
     }
 
     return (
-      <div className="mt-1 text-sm text-white">
-        {message.content}
+      <div className="mt-1 text-sm text-white prose prose-invert max-w-none">
+        <ReactMarkdown>{message.content}</ReactMarkdown>
       </div>
     );
   };

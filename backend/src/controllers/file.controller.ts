@@ -212,11 +212,13 @@ export class FileController {
 
   async getChannelFiles(req: Request, res: Response) {
     try {
+      console.log('Getting files for channel:', req.params.channelId);
       const files = await prisma.file.findMany({
         where: { channelId: req.params.channelId },
         orderBy: { createdAt: 'desc' },
         include: { user: true, channel: true }
       });
+      console.log('Found files:', files.length);
       return res.json(files);
     } catch (error) {
       console.error('Error getting channel files:', error);
@@ -235,6 +237,21 @@ export class FileController {
     } catch (error) {
       console.error('Error getting user files:', error);
       return res.status(500).json({ error: 'Failed to get user files' });
+    }
+  }
+
+  async getAllFiles(_req: Request, res: Response) {
+    try {
+      console.log('Getting all files');
+      const files = await prisma.file.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: { user: true, channel: true }
+      });
+      console.log('Found files:', files.length);
+      return res.json(files);
+    } catch (error) {
+      console.error('Error getting all files:', error);
+      return res.status(500).json({ error: 'Failed to get files' });
     }
   }
 

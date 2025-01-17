@@ -84,112 +84,61 @@ export class AssistantService {
     }
   }
 
-  async getAssistantResponse(message: Message, channel: Channel, userId: string): Promise<string> {
-    console.log('\n=== ASSISTANT SERVICE - getAssistantResponse ===');
-    console.log('Message:', {
-      id: message.id,
-      content: message.content,
-      channelId: message.channelId
+  async getAssistantResponse(message: string, channel: Channel, userId: string, threadId?: string): Promise<string> {
+    console.log('Getting assistant response for message:', message);
+    
+    const sender = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        username: true
+      }
     });
-    console.log('Channel:', {
-      id: channel.id,
-      name: channel.name,
-      type: channel.isPrivate ? 'private' : 'public'
-    });
-    console.log('UserId:', userId);
 
-    try {
-      // Check if this is a channel query (summarize, etc.)
-      const isChannelQuery = message.content.toLowerCase().includes('summarize') || 
-        message.content.toLowerCase().includes('summary') ||
-        message.content.toLowerCase().includes('what') ||
-        message.content.toLowerCase().includes('who') ||
-        message.content.toLowerCase().includes('when') ||
-        message.content.toLowerCase().includes('where') ||
-        message.content.toLowerCase().includes('why') ||
-        message.content.toLowerCase().includes('how');
-
-      console.log('Is channel query:', isChannelQuery);
-      
-      // Use summarize endpoint for channel queries
-      if (isChannelQuery) {
-        console.log('Using summarize endpoint for channel query...');
-        
+    // Check if this is a summarize request
+    if (message.toLowerCase().includes('@assistant summarize') || message.toLowerCase().includes('@assistant summary')) {
+        console.log('Using summarize endpoint');
         const response = await fetch(`${this.assistantUrl}/assistant/summarize/${channel.id}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            query: message.content.replace(/@assistant/gi, '').trim(),
-            limit: 100
-          })
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                query: message,
+                limit: 100
+            })
         });
 
-        console.log('Response status:', response.status);
-        
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Assistant service error:', {
-            status: response.status,
-            statusText: response.statusText,
-            body: errorText
-          });
-          throw new Error(`Assistant service error: ${response.status} - ${errorText}`);
+            console.error('Error from assistant service:', response.status, await response.text());
+            throw new Error('Failed to get response from assistant service');
         }
 
         const data = await response.json();
-        console.log('Response data:', data);
         return data.response;
-      }
-
-      // For direct messages to the assistant
-      console.log('Using chat endpoint for direct assistant interaction...');
-      const sender = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          username: true
-        }
-      });
-
-      const requestBody = {
-        message: message.content.replace(/@assistant/gi, '').trim(),
-        channel_id: channel.id,
-        user_id: userId,
-        channel_type: this.getChannelType(channel),
-        thread_id: message.threadId,
-        username: sender?.username || 'User'
-      };
-
-      console.log('Sending request to:', `${this.assistantUrl}/assistant/chat`);
-      console.log('Request body:', JSON.stringify(requestBody, null, 2));
-      
-      const response = await fetch(`${this.assistantUrl}/assistant/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      console.log('Response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Assistant service error:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorText
+    } else {
+        console.log('Using chat endpoint');
+        const response = await fetch(`${this.assistantUrl}/assistant/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                message,
+                channel_id: channel.id,
+                user_id: userId,
+                username: sender?.username,
+                channel_type: this.getChannelType(channel),
+                thread_id: threadId
+            })
         });
-        throw new Error(`Assistant service error: ${response.status} - ${errorText}`);
-      }
 
-      const data = await response.json();
-      console.log('Response data:', data);
-      return data.response;
-    } catch (error) {
-      console.error('Assistant service error:', error);
-      throw new Error('Failed to get assistant response');
+        if (!response.ok) {
+            console.error('Error from assistant service:', response.status, await response.text());
+            throw new Error('Failed to get response from assistant service');
+        }
+
+        const data = await response.json();
+        return data.response;
     }
   }
 } 

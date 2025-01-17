@@ -1,81 +1,24 @@
 import React, { useState } from 'react';
 import { MessageService } from '../../../services/message.service';
-import { AssistantService } from '../../../services/assistant.service';
 import { useChannel } from '../../channels/context/ChannelContext';
 import { useUserContext } from '../../../contexts/UserContext';
 import { socket } from '../../../services/socket.service';
-import { Message } from '../types/message.types';
-
-// Get assistant bot ID from environment variable
-const ASSISTANT_BOT_USER_ID = import.meta.env.VITE_ASSISTANT_BOT_USER_ID || 'assistant-bot';
 
 interface MessageInputProps {
   onSend?: (content: string) => Promise<void>;
   placeholder?: string;
   threadParentId?: string;
-  onOptimisticUpdate?: (message: Message) => void;
-  onOptimisticRevert?: (messageId: string) => void;
 }
 
 export const MessageInput: React.FC<MessageInputProps> = ({ 
   onSend,
   placeholder = "Type a message...",
-  threadParentId,
-  onOptimisticUpdate,
-  onOptimisticRevert
+  threadParentId
 }) => {
   const [content, setContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const { activeChannel } = useChannel();
   const { userId, username } = useUserContext();
-
-  const handleAssistantMention = async (type: string, query: string) => {
-    if (type === 'assistant' && activeChannel && userId) {
-      try {
-        const response = await AssistantService.getResponse(
-          query,
-          activeChannel.id,
-          userId,
-          activeChannel.isPrivate ? 'private' : 'public',
-          undefined,
-          username || undefined
-        );
-        
-        // Create optimistic message for assistant's response
-        const optimisticMessage: Message = {
-          id: `temp-${Date.now()}`,
-          content: response.response,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          userId: ASSISTANT_BOT_USER_ID,
-          channelId: activeChannel.id,
-          user: {
-            id: ASSISTANT_BOT_USER_ID,
-            username: 'Assistant'
-          },
-          reactions: {}
-        };
-
-        // Update UI immediately
-        onOptimisticUpdate?.(optimisticMessage);
-        
-        try {
-          // Send the actual message (always to channel, never to thread)
-          await MessageService.createMessage({
-            content: response.response,
-            channelId: activeChannel.id,
-            userId: ASSISTANT_BOT_USER_ID
-          });
-        } catch (error) {
-          console.error('Failed to send assistant message:', error);
-          // Revert optimistic update if message send fails
-          onOptimisticRevert?.(optimisticMessage.id);
-        }
-      } catch (error) {
-        console.error('Failed to get assistant response:', error);
-      }
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,25 +28,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     setIsSending(true);
     setContent('');
 
-    // Create optimistic message for user's message
-    const userMessage: Message = {
-      id: `temp-${Date.now()}`,
-      content: trimmedContent,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      userId: userId as string,
-      channelId: activeChannel.id,
-      threadId: threadParentId || undefined,
-      user: {
-        id: userId as string,
-        username: username as string
-      },
-      reactions: {}
-    };
-
-    // Update UI with user's message
-    onOptimisticUpdate?.(userMessage);
-
     try {
       // Send user's message
       if (onSend) {
@@ -112,6 +36,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         await MessageService.createMessage({
           content: trimmedContent,
           threadId: threadParentId,
+          channelId: activeChannel.id
         });
       } else {
         await MessageService.createMessage({
@@ -119,17 +44,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           channelId: activeChannel.id,
         });
       }
-
-      // If this is a DM with the assistant or contains @assistant mention, get the assistant's response
-      const isDMWithAssistant = activeChannel.isPrivate && activeChannel.members?.some(member => member.id === ASSISTANT_BOT_USER_ID);
-      if (isDMWithAssistant || trimmedContent.includes('@assistant')) {
-        const query = trimmedContent.replace(/@assistant/g, '').trim();
-        await handleAssistantMention('assistant', query);
-      }
     } catch (error) {
       console.error('Failed to send message:', error);
-      // Revert optimistic update
-      onOptimisticRevert?.(userMessage.id);
       setContent(trimmedContent);
     } finally {
       setIsSending(false);

@@ -53,9 +53,20 @@ class FileService {
     }
   }
 
-  async listFiles(channelId: string): Promise<FileObject[]> {
+  async listFiles(channelId?: string): Promise<FileObject[]> {
     try {
+      // If no channelId provided, get all files
+      if (!channelId) {
+        console.log('Fetching all files');
+        const response = await api.get('/api/files');
+        console.log('Files response:', response);
+        return response as FileObject[];
+      }
+
+      // Otherwise get files for specific channel
+      console.log('Fetching files for channel:', channelId);
       const response = await api.get(`/api/files/channel/${channelId}`);
+      console.log('Files response:', response);
       return response as FileObject[];
     } catch (error) {
       console.error('Error listing files:', error);

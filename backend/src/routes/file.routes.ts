@@ -47,4 +47,9 @@ router.post('/webhook/process', async (req: Request, res: Response): Promise<voi
   await documentController.processWebhook(req, res);
 });
 
+// Get all files
+router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  await fileController.getAllFiles(req, res);
+});
+
 export default router; 

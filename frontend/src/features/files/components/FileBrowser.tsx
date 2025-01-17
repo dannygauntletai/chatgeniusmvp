@@ -60,7 +60,9 @@ export const FileBrowser = ({ selectedFileId, channelId }: FileBrowserProps) => 
       } else {
         setLoading(true);
       }
-      const data = await fileService.listFiles(channelId || PUBLIC_FILES_CHANNEL_ID);
+      console.log('Loading all files');
+      const data = await fileService.listFiles();
+      console.log('Loaded files:', data);
       setFiles(data);
       setError(null);
 
@@ -75,13 +77,13 @@ export const FileBrowser = ({ selectedFileId, channelId }: FileBrowserProps) => 
         }, 100);
       }
     } catch (err) {
-      setError('Failed to load files');
       console.error('Error loading files:', err);
+      setError('Failed to load files');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedFileId, channelId]);
+  }, [selectedFileId]);
 
   useEffect(() => {
     loadFiles();
