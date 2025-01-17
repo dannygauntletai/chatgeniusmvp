@@ -4,9 +4,8 @@ import os
 from dotenv import load_dotenv
 import httpx
 from openai import AsyncOpenAI
-from pinecone import Pinecone, ServerlessSpec
+from pinecone import Pinecone
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Pinecone as LangchainPinecone
 from langchain_core.documents import Document
 from langchain_pinecone import PineconeVectorStore
 import json
@@ -15,7 +14,7 @@ from routers.vector import retrieve_similar_messages
 from langsmith import Client
 from langchain_core.tracers.context import tracing_v2_enabled
 from utils import get_prisma
-from phone_client import PhoneServiceClient
+from clients.phone_client import PhoneServiceClient
 import logging
 from datetime import datetime
 import asyncio
@@ -28,126 +27,136 @@ router = APIRouter()
 
 # Constants
 ASSISTANT_BOT_USER_ID = os.getenv("ASSISTANT_BOT_USER_ID", "assistant-bot")
-# Use the assistant service URL since phone endpoints are in the same service
 ASSISTANT_SERVICE_URL = os.getenv("ASSISTANT_SERVICE_URL", "http://localhost:8000")
+MODEL_NAME = "gpt-4-turbo-preview"
+MAX_TOKENS = 4096  # Response token limit
+MAX_CONTEXT_TOKENS = 4096  # Increased for detailed document analysis
+MAX_CHUNK_TOKENS = 4096  # Increased for larger document chunks
+TEMPERATURE = 0.7
+SIMILARITY_THRESHOLD = 0.3  # More lenient similarity threshold for document retrieval
+TOP_K = 10  # Increased to get more context from documents
+
+class AssistantManager:
+    def __init__(self, client: AsyncOpenAI):
+        self.client = client
+        self.phone_client = PhoneServiceClient()
+
+    async def generate_response(self, username: str, message: str, context: str) -> str:
+        """Generate a response using the OpenAI API."""
+        # For document analysis, we want to keep as much context as possible
+        if len(context) > MAX_CONTEXT_TOKENS * 4:
+            # Split context into chunks and summarize each chunk
+            chunks = [context[i:i + MAX_CONTEXT_TOKENS * 4] for i in range(0, len(context), MAX_CONTEXT_TOKENS * 4)]
+            summarized_chunks = []
+            
+            for chunk in chunks[:3]:  # Process up to 3 chunks to stay within limits
+                try:
+                    summary = await self.client.chat.completions.create(
+                        model=MODEL_NAME,
+                        messages=[
+                            {"role": "system", "content": "Summarize this content while preserving key details and facts:"},
+                            {"role": "user", "content": chunk}
+                        ],
+                        temperature=0.3,  # Lower temperature for more factual summaries
+                        max_tokens=1000
+                    )
+                    summarized_chunks.append(summary.choices[0].message.content)
+                except Exception as e:
+                    logging.error(f"Error summarizing chunk: {str(e)}")
+                    continue
+            
+            context = "\n\n".join(summarized_chunks) + "\n\n[Context was summarized for length]"
+            
+        completion = await self.client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": context},
+                {"role": "user", "content": f"{username}: {message}"}
+            ],
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS
+        )
+        return completion.choices[0].message.content
+
+    async def build_context(self, similar_messages: List[Message]) -> str:
+        """Build the context string for the assistant."""
+        context = "You are ChatGenius, a helpful AI assistant specializing in detailed document analysis. "
+        context += "You help users by providing comprehensive, accurate information from documents and conversation history. "
+        context += "When answering questions about documents, include specific details, quotes, and references to support your answers. "
+        context += "Be thorough but clear in your explanations.\n\n"
+        
+        if similar_messages:
+            context += "Here are the relevant document sections and messages that might help with context:\n"
+            total_chars = 0
+            for msg in similar_messages[:TOP_K]:  # Include more messages for better context
+                # For document chunks, preserve more content
+                msg_chars = len(msg.content) + len(msg.sender_name) + 2
+                
+                if msg_chars > MAX_CHUNK_TOKENS * 4:
+                    # For long chunks, try to preserve complete sentences
+                    truncated_content = msg.content[:(MAX_CHUNK_TOKENS * 4) - len(msg.sender_name) - 20]
+                    last_period = truncated_content.rfind('.')
+                    if last_period > 0:
+                        truncated_content = truncated_content[:last_period + 1]
+                    context += f"{msg.sender_name}: {truncated_content}\n"
+                    total_chars += len(truncated_content) + len(msg.sender_name) + 2
+                else:
+                    context += f"{msg.sender_name}: {msg.content}\n"
+                    total_chars += msg_chars
+                
+                if total_chars > MAX_CONTEXT_TOKENS * 4:
+                    context += "\n[Additional content available but truncated for length]\n"
+                    break
+            context += "\n"
+        
+        return context
+
+    async def process_call_status(
+        self,
+        call_sid: str,
+        call_status: str,
+        recording_sid: str = None,
+        recording_url: str = None,
+        recording_duration: int = None,
+        recording_status: str = None,
+        channel_id: str = None,
+        user_id: str = None
+    ) -> Dict[str, str]:
+        """Process call status updates and recordings."""
+        try:
+            # If this is a recording callback
+            if recording_status:
+                logging.info(f"Recording status update: {recording_status}")
+                if recording_status == "completed":
+                    logging.info(f"Recording completed: {recording_url}")
+                    # Process recording if needed
+                    return {"status": "success", "type": "recording"}
+                else:
+                    logging.info(f"Recording in progress: {recording_status}")
+                    return {"status": "pending", "type": "recording"}
+            
+            # If this is a call status callback
+            elif call_status:
+                logging.info(f"Call status update: {call_status}")
+                if call_status == "completed":
+                    logging.info("Call completed, waiting for recording callback")
+                    return {"status": "success", "type": "call"}
+                else:
+                    logging.info(f"Call in progress: {call_status}")
+                    return {"status": "pending", "type": "call"}
+            
+            return {"status": "unknown"}
+            
+        except Exception as e:
+            logging.error(f"Error processing call status: {str(e)}")
+            if hasattr(e, '__traceback__'):
+                import traceback
+                logging.error(f"Traceback: {''.join(traceback.format_tb(e.__traceback__))}")
+            raise
 
 # Initialize components
 openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-embeddings = OpenAIEmbeddings()
-langsmith_client = Client()
-phone_client = PhoneServiceClient()
-
-async def update_vector_db(message_id: str):
-    """Update the vector database with a new message."""
-    try:
-        print(f"\n=== UPDATE VECTOR DB CALLED ===")
-        print(f"Attempting to update vector DB with message_id: {message_id}")
-        
-        prisma = get_prisma()
-        print(f"Prisma client initialized")
-        
-        # Get message from database
-        print(f"Attempting to find message with ID: {message_id}")
-        message = await prisma.message.find_unique(
-            where={"id": message_id},
-            include={"user": True, "channel": True}
-        )
-        print(f"Database query result: {message}")
-        
-        if not message:
-            print(f"Message not found in database: {message_id}")
-            raise HTTPException(status_code=404, detail="Message not found")
-        
-        # Skip messages containing @assistant
-        if "@assistant" in message.content:
-            print(f"Skipping message {message_id} - contains @assistant mention")
-            return {"status": "skipped", "reason": "assistant mention"}
-        
-        print(f"Initializing vector store for message: {message_id}")
-        # Initialize vector store
-        vector_store = PineconeVectorStore(
-            index_name="chatgenius-messages",
-            embedding=embeddings,
-            pinecone_api_key=os.getenv("PINECONE_API_KEY")
-        )
-        
-        # Create document
-        doc = Document(
-            page_content=message.content,
-            metadata={
-                "message_id": message.id,
-                "channel_id": message.channelId,
-                "channel_name": message.channel.name if message.channel else None,
-                "sender_name": message.user.username if message.user else None,
-            }
-        )
-        print(f"Created document for vector store: {doc}")
-        
-        # Add to vector store
-        print(f"Attempting to add document to vector store")
-        await vector_store.aadd_documents([doc])
-        print(f"Successfully added document to vector store")
-        
-        return {"status": "success"}
-            
-    except Exception as e:
-        print(f"Error in update_vector_db: {str(e)}")
-        print(f"Error type: {type(e)}")
-        if hasattr(e, '__traceback__'):
-            import traceback
-            print(f"Traceback: {''.join(traceback.format_tb(e.__traceback__))}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to update vector database: {str(e)}"
-        )
-
-async def handle_phone_call(message: str, channel_id: str, user_id: str, thread_id: Optional[str] = None) -> bool:
-    """Handle potential phone call requests."""
-    try:
-        print(f"\n=== HANDLING PHONE CALL REQUEST ===")
-        print(f"Message: {message}")
-        print(f"Channel: {channel_id}")
-        print(f"User: {user_id}")
-        print(f"Thread: {thread_id}")
-        
-        # Extract call details with context using direct client call
-        extract_data = await phone_client.extract_call_details(
-            message=message,
-            context={
-                "channel_id": channel_id,
-                "user_id": user_id,
-                "thread_id": thread_id,
-                "channel_type": "private"  # Default to private for direct messages
-            }
-        )
-        
-        if not extract_data["is_call_request"]:
-            return False
-            
-        # Make the call with extracted details using direct client call
-        call_response = await phone_client.make_call(
-            to_number=extract_data["phone_number"],
-            message=extract_data["message"],
-            channel_id=channel_id,
-            user_id=user_id,
-            thread_id=thread_id
-        )
-        
-        if not call_response:
-            print("Error making call: No response from phone client")
-            return False
-            
-        print("Call initiated successfully")
-        return True
-        
-    except Exception as e:
-        print(f"Error handling phone call: {str(e)}")
-        print(f"Error type: {type(e)}")
-        if hasattr(e, '__traceback__'):
-            import traceback
-            print(f"Traceback: {''.join(traceback.format_tb(e.__traceback__))}")
-        return False
+assistant_manager = AssistantManager(openai_client)
 
 @router.post("/chat", response_model=AssistantResponse)
 async def chat(
@@ -156,92 +165,42 @@ async def chat(
     user_id: str = Body(...),
     channel_type: str = Body(...),
     username: str = Body(...),
-    thread_id: Optional[str] = Body(None)  # Keep parameter but ignore it
+    thread_id: Optional[str] = Body(None)
 ):
-    """Process a chat message and return an AI response."""
+    """Process a chat message and generate a response."""
     try:
-        with tracing_v2_enabled() as tracer:
-            print(f"\n=== ASSISTANT SERVICE CHAT ENDPOINT CALLED ===")
-            print(f"Message: {message}")
-            print(f"Channel: {channel_id}")
-            print(f"User: {user_id}")
-            # Removed thread_id logging since we're ignoring it
-        
-            # Extract call details
-            is_call_request, call_details = await phone_client.extract_call_details(
-                message=message,
-                context={"user_id": user_id, "channel_id": channel_id}
-            )
-            
-            if is_call_request and call_details:
-                # Make the call
-                call_response = await phone_client.make_call(
-                    to_number=call_details["phone_number"],
-                    message=call_details["message"],
-                    channel_id=channel_id,
-                    user_id=user_id
-                )
-                
-                # Wait for recording to be ready
-                max_retries = 30  # 30 seconds timeout
-                recording_url = None
-                async with httpx.AsyncClient() as http_client:
-                    for _ in range(max_retries):
-                        recording_response = await http_client.get(
-                            f"{ASSISTANT_SERVICE_URL}/phone/recording/{call_response['call_sid']}"
-                        )
-                        if recording_response.status_code == 200:
-                            recording_data = recording_response.json()
-                            if recording_data.get("recording_url"):
-                                recording_url = recording_data["recording_url"]
-                                break
-                        await asyncio.sleep(1)  # Wait 1 second before retrying
-                
-                return AssistantResponse(
-                    response=recording_url if recording_url else "",
-                    context_used=[],
-                    confidence=1.0
-                )
-
+        with tracing_v2_enabled():
             # Create RetrieveRequest instance
             request = RetrieveRequest(
                 query=message,
                 channel_id=channel_id,
                 user_id=ASSISTANT_BOT_USER_ID,
                 channel_type=channel_type,
-                top_k=5,
-                threshold=0.7
+                top_k=TOP_K,
+                threshold=SIMILARITY_THRESHOLD
             )
             
-            # Get similar messages from vector store using direct function call
+            # Get similar messages from vector store
             retrieve_response = await retrieve_similar_messages(request)
             similar_messages = retrieve_response.messages
             
-            # Build conversation context
-            context = "You are ChatGenius, a helpful AI assistant. "
-            context += "You help users by providing accurate and relevant information based on the conversation history. "
-            context += "You can access and reference previous messages to provide context-aware responses. "
-            context += "Always be professional, concise, and helpful.\n\n"
+            # Build context and generate response
+            context = await assistant_manager.build_context(similar_messages)
+            response = await assistant_manager.generate_response(username, message, context)
             
+            # Add source information to the response using a set to avoid duplicates
             if similar_messages:
-                context += "Here are some relevant previous messages that might help with context:\n"
+                sources = set()
                 for msg in similar_messages:
-                    context += f"{msg.sender_name}: {msg.content}\n"
-                context += "\n"
-            
-            # Create chat completion
-            completion = await openai_client.chat.completions.create(
-                model="gpt-4-turbo-preview",
-                messages=[
-                    {"role": "system", "content": context},
-                    {"role": "user", "content": f"{username}: {message}"}
-                ],
-                temperature=0.7,
-                max_tokens=1000,
-                n=1
-            )
-
-            response = completion.choices[0].message.content
+                    source = msg.sender_name
+                    if hasattr(msg, 'channel_name') and msg.channel_name:
+                        source += f" in {msg.channel_name}"
+                    sources.add(source)
+                
+                if sources:
+                    response += "\n\nSources used:"
+                    for source in sorted(sources):  # Sort for consistent ordering
+                        response += f"\n- {source}"
             
             return AssistantResponse(
                 response=response,
@@ -250,8 +209,8 @@ async def chat(
             )
             
     except Exception as e:
-        print(f"Error in chat endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        logging.error(f"Error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/call-status")
 async def call_status_callback(
@@ -266,64 +225,22 @@ async def call_status_callback(
     ChannelId: str = Body(None),
     UserId: str = Body(None)
 ):
-    """Handle call status and recording status updates."""
+    """Handle call status and recording callbacks."""
     try:
-        print(f"\n=== CALL STATUS/RECORDING CALLBACK RECEIVED ===")
-        print(f"Raw request data: {await request.json()}")
-        print(f"Query parameters: {request.query_params}")
-        print(f"Call SID: {CallSid}")
-        print(f"Call Status: {CallStatus}")
-        print(f"Recording SID: {RecordingSid}")
-        print(f"Recording Status: {RecordingStatus}")
-        print(f"Recording URL: {RecordingUrl}")
-        print(f"Recording Duration: {RecordingDuration}")
-        print(f"Channel ID: {ChannelId}")
-        print(f"User ID: {UserId}")
-        print(f"Account SID: {AccountSid}")
-        
-        # If this is a recording status callback and the recording is completed
-        if RecordingSid and RecordingStatus == "completed" and RecordingUrl:
-            print("Recording is complete, fetching details...")
-            # Create a new message with the recording
-            async with httpx.AsyncClient() as client:
-                # First get the recording details from our phone service
-                recording_response = await client.get(
-                    f"{ASSISTANT_SERVICE_URL}/phone/recording/{CallSid}"
-                )
-                print(f"Recording response status: {recording_response.status_code}")
-                if recording_response.status_code == 200:
-                    recording_data = recording_response.json()
-                    print(f"Recording data: {recording_data}")
-                    
-                    # Create message with recording
-                    message_response = await client.post(
-                        f"{os.getenv('BACKEND_URL')}/api/messages/assistant",
-                        json={
-                            "content": recording_data["recording_url"],
-                            "channelId": ChannelId,
-                            "userId": ASSISTANT_BOT_USER_ID
-                        }
-                    )
-                    print(f"Message creation response status: {message_response.status_code}")
-                    print(f"Message creation response: {message_response.text}")
-            return {"status": "success", "type": "recording"}
-            
-        # If this is a call status callback
-        elif CallStatus:
-            print(f"Call status update: {CallStatus}")
-            if CallStatus == "completed":
-                print("Call completed, waiting for recording callback")
-                return {"status": "success", "type": "call"}
-            else:
-                print(f"Call in progress: {CallStatus}")
-                return {"status": "pending", "type": "call"}
-                
-        return {"status": "unknown"}
+        return await assistant_manager.process_call_status(
+            call_sid=CallSid,
+            call_status=CallStatus,
+            recording_sid=RecordingSid,
+            recording_url=RecordingUrl,
+            recording_duration=RecordingDuration,
+            recording_status=RecordingStatus,
+            channel_id=ChannelId,
+            user_id=UserId
+        )
         
     except Exception as e:
-        print(f"Error in call status callback: {str(e)}")
-        print(f"Error type: {type(e)}")
+        logging.error(f"Error in call status callback: {str(e)}")
         if hasattr(e, '__traceback__'):
             import traceback
-            print(f"Traceback: {''.join(traceback.format_tb(e.__traceback__))}")
+            logging.error(f"Traceback: {''.join(traceback.format_tb(e.__traceback__))}")
         raise HTTPException(status_code=500, detail=str(e)) 

@@ -22,12 +22,10 @@ const LoggedHomePage = () => {
 const DashboardLayout = () => {
   const { session } = useSession();
   const [isTokenSet, setIsTokenSet] = useState(false);
-  console.log('Dashboard session:', session?.id);
+  let refreshTimeout: NodeJS.Timeout | undefined;
+  let isMounted = true;
 
   useEffect(() => {
-    let isMounted = true;
-    let refreshTimeout: NodeJS.Timeout;
-
     const setupAuth = async () => {
       if (!isMounted || !session) return;
 
@@ -50,8 +48,12 @@ const DashboardLayout = () => {
         await new Promise(resolve => setTimeout(resolve, 0));
         
         if (isMounted) {
-          // Connect socket with auth credentials
-          await connectSocket(session.id, sessionToken);
+          // Get token expiry time
+          const expiryTime = session.expireAt;
+          const expiry = expiryTime ? new Date(expiryTime).getTime() : Date.now() + 3600000;
+
+          // Connect socket with auth credentials and expiry time
+          await connectSocket(session.id, sessionToken, expiry);
           
           // Set user as online only during initial connection
           socket.emit('status:update', 'online');
@@ -60,7 +62,6 @@ const DashboardLayout = () => {
           setIsTokenSet(true);
 
           // Schedule next refresh for 5 minutes before token expiry
-          const expiryTime = session.expireAt;
           if (expiryTime) {
             const now = new Date();
             const expiry = new Date(expiryTime);
@@ -79,6 +80,12 @@ const DashboardLayout = () => {
       }
     };
 
+    // Listen for token expiry events from socket
+    socket.on('auth:token_expired', () => {
+      console.log('Token expired event received, refreshing auth...');
+      setupAuth();
+    });
+
     setupAuth();
 
     return () => {
@@ -86,6 +93,7 @@ const DashboardLayout = () => {
       if (refreshTimeout) {
         clearTimeout(refreshTimeout);
       }
+      socket.off('auth:token_expired');
       // Only disconnect socket, don't update status
       disconnectSocket();
     };
