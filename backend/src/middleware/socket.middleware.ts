@@ -38,8 +38,7 @@ export const socketAuth = async (socket: Socket, next: (err?: Error) => void) =>
 
       // Set up expiry handler
       const expiryTimeout = setTimeout(() => {
-        console.log('Token expired, disconnecting socket');
-        socket.emit('auth:token_expired');
+                socket.emit('auth:token_expired');
         socket.disconnect(true);
       }, timeToExpiry);
 

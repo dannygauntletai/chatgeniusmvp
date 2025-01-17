@@ -57,17 +57,13 @@ class FileService {
     try {
       // If no channelId provided, get all files
       if (!channelId) {
-        console.log('Fetching all files');
-        const response = await api.get('/api/files');
-        console.log('Files response:', response);
-        return response as FileObject[];
+                const response = await api.get('/api/files');
+                return response as FileObject[];
       }
 
       // Otherwise get files for specific channel
-      console.log('Fetching files for channel:', channelId);
-      const response = await api.get(`/api/files/channel/${channelId}`);
-      console.log('Files response:', response);
-      return response as FileObject[];
+            const response = await api.get(`/api/files/channel/${channelId}`);
+            return response as FileObject[];
     } catch (error) {
       console.error('Error listing files:', error);
       throw error;
@@ -76,21 +72,17 @@ class FileService {
 
   async uploadFile(file: File, channelId?: string): Promise<FileObject> {
     try {
-      console.log(`Starting file upload - Name: ${file.name}, Size: ${file.size} bytes, Type: ${file.type}`);
-      
+            
       const formData = new FormData();
       formData.append('file', file);
       
       // If no channelId provided, get the public bucket ID
       const targetChannelId = channelId || await this.getPublicBucketId();
-      console.log(`Using channel ID: ${targetChannelId}`);
-      formData.append('channelId', targetChannelId);
+            formData.append('channelId', targetChannelId);
 
       // Use the api service which handles auth
-      console.log('Initiating upload request to server...');
-      const response = await api.post('/api/files/upload', formData, true);
-      console.log('File upload successful:', response);
-      return response as FileObject;
+            const response = await api.post('/api/files/upload', formData, true);
+            return response as FileObject;
     } catch (error) {
       console.error('File upload failed with details:', {
         fileName: file.name,

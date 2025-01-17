@@ -10,36 +10,23 @@ export class AssistantService {
   }
 
   async shouldGenerateResponse(channel: Channel, recipientId: string): Promise<boolean> {
-    console.log('\n=== ASSISTANT SERVICE - shouldGenerateResponse ===');
-    console.log('Channel:', JSON.stringify(channel, null, 2));
-    console.log('RecipientId:', recipientId);
-
+    
     // Only generate responses for DM channels
     if (!channel.name.startsWith('dm-')) {
-      console.log('Not a DM channel, skipping AI response');
-      return false;
+            return false;
     }
 
-    console.log('Looking up recipient in database...');
-    // Get recipient's status
+        // Get recipient's status
     const recipient = await prisma.user.findUnique({
       where: { id: recipientId }
     });
-
-    console.log('Recipient from database:', JSON.stringify(recipient, null, 2));
-    console.log('Recipient status:', recipient?.status);
-    console.log('Should generate response:', recipient?.status === 'offline');
-
+        
     // Generate response if user is offline
     return recipient?.status === 'offline';
   }
 
-  async generateOfflineResponse(message: Message, offlineUser: User, channel: Channel): Promise<string> {
-    console.log('\n=== ASSISTANT SERVICE - generateOfflineResponse ===');
-    console.log('Generating offline response for message:', message.id);
-    console.log('Offline user:', offlineUser.username);
-    console.log('Channel:', channel.name);
-
+  async generateOfflineResponse(message: Message, offlineUser: User, _channel: Channel): Promise<string> {
+                
     try {
       // Get the sender's info for context
       const sender = await prisma.user.findUnique({
@@ -50,9 +37,7 @@ export class AssistantService {
       });
 
       // For DM responses, use the offline user endpoint
-      console.log('Using offline user endpoint for DM response');
-      console.log('Offline user ID:', offlineUser.id);
-      
+                  
       const response = await fetch(`${this.assistantUrl}/assistant/offline/${offlineUser.id}`, {
         method: 'POST',
         headers: {
@@ -76,8 +61,7 @@ export class AssistantService {
       }
 
       const data = await response.json();
-      console.log('Response data:', data);
-      return data.response;
+            return data.response;
     } catch (error) {
       console.error('Error generating offline response:', error);
       throw error;
@@ -85,8 +69,7 @@ export class AssistantService {
   }
 
   async getAssistantResponse(message: string, channel: Channel, userId: string, threadId?: string): Promise<string> {
-    console.log('Getting assistant response for message:', message);
-    
+        
     const sender = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -96,8 +79,7 @@ export class AssistantService {
 
     // Check if this is a summarize request
     if (message.toLowerCase().includes('@assistant summarize') || message.toLowerCase().includes('@assistant summary')) {
-        console.log('Using summarize endpoint');
-        const response = await fetch(`${this.assistantUrl}/assistant/summarize/${channel.id}`, {
+                const response = await fetch(`${this.assistantUrl}/assistant/summarize/${channel.id}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -116,8 +98,7 @@ export class AssistantService {
         const data = await response.json();
         return data.response;
     } else {
-        console.log('Using chat endpoint');
-        const response = await fetch(`${this.assistantUrl}/assistant/chat`, {
+                const response = await fetch(`${this.assistantUrl}/assistant/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

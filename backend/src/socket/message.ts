@@ -14,9 +14,7 @@ export const handleMessageEvents = (socket: Socket) => {
       
       // Check if message mentions assistant
       if (message.content.toLowerCase().includes('@assistant')) {
-        console.log('\n=== ASSISTANT MENTION DETECTED ===');
-        console.log('Message content:', message.content);
-        
+                        
         // Send typing indicator
         socket.to(message.channelId).emit('user:typing', {
           channelId: message.channelId,
@@ -29,8 +27,7 @@ export const handleMessageEvents = (socket: Socket) => {
         });
         
         if (!channel) {
-          console.log('Channel not found:', message.channelId);
-          socket.to(message.channelId).emit('user:typing', {
+                    socket.to(message.channelId).emit('user:typing', {
             channelId: message.channelId,
             userId: process.env.ASSISTANT_BOT_USER_ID,
             typing: false
@@ -57,8 +54,6 @@ export const handleMessageEvents = (socket: Socket) => {
             channel,
             socket.data.userId
           );
-
-          console.log('Got response from assistant service:', response);
 
           // Create assistant's response message and let MessageService handle the emission
           await messageService.create({

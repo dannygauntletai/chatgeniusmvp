@@ -7,22 +7,14 @@ import { MessageService } from '../services/message.service';
 export class MessageController {
   static async createMessage(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      console.log('=== CREATE MESSAGE START ===');
-      const { content, channelId, threadId, userId: providedUserId } = req.body;
+            const { content, channelId, threadId, userId: providedUserId } = req.body;
       const ASSISTANT_BOT_USER_ID = process.env.ASSISTANT_BOT_USER_ID || 'assistant-bot';
-      
-      console.log('Request body:', req.body);
-      console.log('Auth userId:', req.auth?.userId);
-      console.log('Provided userId:', providedUserId);
-      console.log('Assistant bot ID:', ASSISTANT_BOT_USER_ID);
-      
+
       // Use provided userId if it's the assistant, otherwise use the authenticated user's ID
       const userId = providedUserId === ASSISTANT_BOT_USER_ID ? ASSISTANT_BOT_USER_ID : req.auth.userId;
-      console.log('Final userId to use:', userId);
-
+      
       if (!content || !channelId) {
-        console.log('Missing required fields');
-        return res.status(400).json({ message: 'Content and channelId are required' });
+                return res.status(400).json({ message: 'Content and channelId are required' });
       }
 
       const messageService = new MessageService();
@@ -33,8 +25,7 @@ export class MessageController {
         threadId,
       });
 
-      console.log('Message created:', message);
-      io.to(channelId).emit('message:created', message);
+            io.to(channelId).emit('message:created', message);
       return res.status(201).json(message);
     } catch (error) {
       console.error('Error in createMessage:', error);
@@ -96,21 +87,16 @@ export class MessageController {
 
   static async createAssistantMessage(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
-      console.log('=== CREATE ASSISTANT MESSAGE START ===');
-      const { content, channelId, threadId, userId } = req.body;
+            const { content, channelId, threadId, userId } = req.body;
       const ASSISTANT_BOT_USER_ID = process.env.ASSISTANT_BOT_USER_ID || 'assistant-bot';
-      
-      console.log('Request body:', req.body);
-      
+
       // Verify this is actually the assistant
       if (userId !== ASSISTANT_BOT_USER_ID) {
-        console.log('Invalid userId for assistant message');
-        return res.status(403).json({ error: 'Only the assistant can use this endpoint' });
+                return res.status(403).json({ error: 'Only the assistant can use this endpoint' });
       }
 
       if (!content || !channelId) {
-        console.log('Missing required fields');
-        return res.status(400).json({ message: 'Content and channelId are required' });
+                return res.status(400).json({ message: 'Content and channelId are required' });
       }
 
       const messageService = new MessageService();
@@ -121,8 +107,7 @@ export class MessageController {
         threadId
       });
 
-      console.log('Assistant message created:', message);
-      io.to(channelId).emit('message:created', message);
+            io.to(channelId).emit('message:created', message);
       return res.status(201).json(message);
     } catch (error) {
       console.error('Error in createAssistantMessage:', error);

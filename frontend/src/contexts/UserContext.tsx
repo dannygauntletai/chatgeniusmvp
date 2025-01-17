@@ -30,8 +30,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
 
       const token = await session.getToken();
       if (force || !lastTokenRef.current || token !== lastTokenRef.current) {
-        console.log('Updating token');
-        setAuthToken(token);
+                setAuthToken(token);
         if (token) {
           localStorage.setItem('authToken', token);
         }
@@ -50,8 +49,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     document.body.appendChild(div);
 
     const handleRefreshToken = () => {
-      console.log('Token refresh requested');
-      updateToken(true);
+            updateToken(true);
     };
 
     div.addEventListener('refresh-token', handleRefreshToken);

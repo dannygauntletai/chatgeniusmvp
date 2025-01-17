@@ -8,8 +8,7 @@ export class DocumentService {
     const { file_id, file_url, channel_id, uploader_id, file_name, file_type } = data;
 
     try {
-      console.log('Sending document processing request to:', `${ASSISTANT_SERVICE_URL}/document/process`);
-      const response = await fetch(`${ASSISTANT_SERVICE_URL}/document/process`, {
+            const response = await fetch(`${ASSISTANT_SERVICE_URL}/document/process`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

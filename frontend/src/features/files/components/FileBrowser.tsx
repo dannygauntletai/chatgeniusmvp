@@ -60,10 +60,8 @@ export const FileBrowser = ({ selectedFileId, channelId }: FileBrowserProps) => 
       } else {
         setLoading(true);
       }
-      console.log('Loading all files');
-      const data = await fileService.listFiles();
-      console.log('Loaded files:', data);
-      setFiles(data);
+            const data = await fileService.listFiles();
+            setFiles(data);
       setError(null);
 
       // If there's a selected file, scroll it into view

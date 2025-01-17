@@ -42,8 +42,7 @@ export class ChannelService {
       return channelCache.data;
     }
 
-    console.log('Fetching channels...');
-    const response = await api.get(`/api/channels?page=${page}&limit=${limit}`);
+        const response = await api.get(`/api/channels?page=${page}&limit=${limit}`);
 
     // Update cache
     channelCache = {

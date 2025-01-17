@@ -46,8 +46,7 @@ const clearTokenRefreshTimer = () => {
 };
 
 const handleTokenExpiry = () => {
-  console.log('Token expired or about to expire, disconnecting socket');
-  if (socket.connected) {
+    if (socket.connected) {
     socket.disconnect();
   }
   isConnected = false;
@@ -70,25 +69,21 @@ const setupTokenExpiryCheck = () => {
 
 export const initializeSocket = () => {
   socket.on('connect', () => {
-    console.log('Connected to socket server');
-    isConnected = true;
+        isConnected = true;
     reconnectionAttempts = 0;
     reconnectionDelay = INITIAL_RECONNECTION_DELAY;
     flushMessageBuffer();
   });
 
   socket.on('disconnect', (reason: 'io server disconnect' | 'io client disconnect' | 'ping timeout' | 'transport close' | 'transport error') => {
-    console.log('Disconnected from socket server:', reason);
-    isConnected = false;
+        isConnected = false;
     
     if (reason === 'io server disconnect') {
       // Server initiated disconnect, check token before reconnecting
       if (Date.now() < authData.expiresAt - TOKEN_EXPIRY_BUFFER) {
-        console.log('Token still valid, attempting reconnection');
-        socket.connect();
+                socket.connect();
       } else {
-        console.log('Token expired, skipping reconnection');
-        handleTokenExpiry();
+                handleTokenExpiry();
       }
     }
   });
@@ -99,8 +94,7 @@ export const initializeSocket = () => {
     
     // Check if error is related to authentication
     if (error.message.includes('authentication') || error.message.includes('token')) {
-      console.log('Authentication error, triggering token refresh');
-      handleTokenExpiry();
+            handleTokenExpiry();
       return;
     }
     
@@ -111,11 +105,9 @@ export const initializeSocket = () => {
       setTimeout(() => {
         // Only attempt reconnection if token is still valid
         if (Date.now() < authData.expiresAt - TOKEN_EXPIRY_BUFFER) {
-          console.log(`Attempting reconnection ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS}`);
-          socket.connect();
+                    socket.connect();
         } else {
-          console.log('Token expired or about to expire, skipping reconnection');
-          handleTokenExpiry();
+                    handleTokenExpiry();
         }
       }, reconnectionDelay);
     }
@@ -155,8 +147,7 @@ export const connectSocket = (sessionId: string, sessionToken: string, tokenExpi
   if (Date.now() < authData.expiresAt - TOKEN_EXPIRY_BUFFER) {
     socket.connect();
   } else {
-    console.log('Token expired or about to expire, not connecting');
-    handleTokenExpiry();
+        handleTokenExpiry();
   }
 };
 

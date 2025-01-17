@@ -19,14 +19,10 @@ interface UpdateMessageData {
 
 export class MessageService {
   private async getRecipientFromDMChannel(channelName: string, senderId: string): Promise<string | null> {
-    console.log('\n=== MESSAGE SERVICE - getRecipientFromDMChannel ===');
-    console.log('Channel name:', channelName);
-    console.log('Sender ID:', senderId);
-
+            
     // Extract usernames from DM channel name (format: dm-user1-user2)
     const usernames = channelName.replace('dm-', '').split('-');
-    console.log('Extracted usernames:', usernames);
-    
+        
     // Find both users
     const users = await prisma.user.findMany({
       where: {
@@ -35,17 +31,13 @@ export class MessageService {
         }
       }
     });
-    console.log('Found users:', users);
-
+    
     // Return the ID of the user that isn't the sender
     const recipient = users.find(user => user.id !== senderId);
-    console.log('Selected recipient:', recipient);
-    return recipient?.id || null;
+        return recipient?.id || null;
   }
 
   async create(data: CreateMessageData): Promise<Message> {
-    console.log('\n=== MESSAGE CREATION STARTED ===');
-    console.log('Creating message with data:', JSON.stringify(data, null, 2));
 
     // Default to assistant bot ID if no user ID is provided
     const userId = data.providedUserId || data.userId || process.env.ASSISTANT_BOT_USER_ID!;
@@ -67,21 +59,16 @@ export class MessageService {
         channel: true,
       },
     });
-    console.log('Message created in database:', JSON.stringify(message, null, 2));
 
     // Emit socket event for real-time updates
-    console.log('Broadcasting message:created event');
-    // Emit to the channel room
+        // Emit to the channel room
     io.to(message.channelId).emit('message:created', message);
     // Also emit to all sockets (needed because sender might not be in room yet)
     io.emit('message:created', message);
-    console.log('Emitted message:created event to channel and all sockets');
-
+    
     // Check if message mentions assistant
     if (message.content.toLowerCase().includes('@assistant')) {
-      console.log('\n=== ASSISTANT MENTION DETECTED ===');
-      console.log('Message content:', message.content);
-      
+                  
       // Send typing indicator
       io.to(message.channelId).emit('user:typing', {
         channelId: message.channelId,
@@ -94,8 +81,7 @@ export class MessageService {
       });
       
       if (!channel) {
-        console.log('Channel not found:', message.channelId);
-        io.to(message.channelId).emit('user:typing', {
+                io.to(message.channelId).emit('user:typing', {
           channelId: message.channelId,
           userId: process.env.ASSISTANT_BOT_USER_ID,
           typing: false
@@ -122,8 +108,6 @@ export class MessageService {
           channel,
           message.userId
         );
-
-        console.log('Got response from assistant service:', response);
 
         // Create assistant's response message
         await this.create({
@@ -157,26 +141,17 @@ export class MessageService {
 
     // Check if this is a DM and if we should generate an AI response
     if (message.channel.name.startsWith('dm-') && message.user.id !== process.env.ASSISTANT_BOT_USER_ID) {
-      console.log('\n=== CHECKING FOR AI RESPONSE ===');
-      console.log('Message is in DM channel:', message.channel.name);
-      console.log('Message user ID:', message.user.id);
-      
+                        
       try {
         // Get the recipient using the helper method
-        console.log('About to call getRecipientFromDMChannel...');
-        const recipientId = await this.getRecipientFromDMChannel(message.channel.name, message.user.id);
-        console.log('Finished getRecipientFromDMChannel call');
-        console.log('Found recipient ID:', recipientId);
-        
+                const recipientId = await this.getRecipientFromDMChannel(message.channel.name, message.user.id);
+                        
         if (recipientId === process.env.ASSISTANT_BOT_USER_ID) {
-          console.log('Message is for assistant, generating response...');
-          const response = await assistantService.getAssistantResponse(
+                    const response = await assistantService.getAssistantResponse(
             message.content,
             message.channel,
             message.user.id
           );
-
-          console.log('Got response from assistant service:', response);
 
           // Create assistant's response message
           await this.create({
@@ -189,35 +164,27 @@ export class MessageService {
         }
         
         if (recipientId) {
-          console.log('Got valid recipient ID, checking if should generate response...');
-          const shouldRespond = await assistantService.shouldGenerateResponse(message.channel, recipientId);
-          console.log('shouldGenerateResponse returned:', shouldRespond);
-          
+                    const shouldRespond = await assistantService.shouldGenerateResponse(message.channel, recipientId);
+                    
           if (shouldRespond) {
-            console.log('Getting recipient info...');
-            // Get the recipient's user info
+                        // Get the recipient's user info
             const recipient = await prisma.user.findUnique({
               where: { id: recipientId }
             });
-            console.log('Recipient info:', recipient);
-
+            
             if (recipient) {
-              console.log('Generating offline response...');
-              // Generate response using the user's message history
+                            // Generate response using the user's message history
               const aiResponse = await assistantService.generateOfflineResponse(message, recipient, message.channel);
-              console.log('Generated offline response:', aiResponse);
-              
+                            
               if (aiResponse) {
                 // Create and emit the AI response message using the offline user's ID
-                console.log('Creating response message...');
-                await this.create({
+                                await this.create({
                   content: aiResponse,
                   channelId: message.channelId,
                   threadId: message.threadId || undefined,
                   providedUserId: recipientId // Use the offline user's ID
                 });
-                console.log('Created response message');
-              }
+                              }
             }
           }
         }

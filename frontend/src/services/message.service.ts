@@ -4,15 +4,13 @@ import { api } from '../services/api.service';
 
 export class MessageService {
   static async createMessage(data: { content: string; channelId: string; threadId?: string; userId?: string }): Promise<Message> {
-    console.log('Creating message with data:', data);
-    const response = await api.post('/api/messages', {
+        const response = await api.post('/api/messages', {
       content: data.content,
       channelId: data.channelId,
       threadId: data.threadId,
       userId: data.userId
     });
-    console.log('Message created:', response);
-    return response as Message;
+        return response as Message;
   }
 
   static async updateMessage(messageId: string, content: string): Promise<Message> {
@@ -23,15 +21,13 @@ export class MessageService {
   }
 
   static async addReaction(messageId: string, emoji: string): Promise<void> {
-    console.log('MessageService: Adding reaction', { messageId, emoji });
-    await api.post(`/api/messages/${messageId}/reactions`, {
+        await api.post(`/api/messages/${messageId}/reactions`, {
       emoji
     });
   }
 
   static async removeReaction(messageId: string, emoji: string): Promise<void> {
-    console.log('MessageService: Removing reaction', { messageId, emoji });
-    await api.delete(`/api/messages/${messageId}/reactions/${emoji}`);
+        await api.delete(`/api/messages/${messageId}/reactions/${emoji}`);
   }
 
   static async getReactions(messageId: string): Promise<Record<string, Array<{ id: string; username: string }>>> {

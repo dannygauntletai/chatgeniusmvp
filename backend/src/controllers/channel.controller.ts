@@ -11,8 +11,6 @@ export class ChannelController {
       const { name, isPrivate = false, members = [] } = req.body;
       const userId = req.auth.userId;
 
-      console.log('Creating channel:', { name, isPrivate, members, userId });
-
       if (!name) {
         res.status(400).json({ message: 'Channel name is required' });
         return;
@@ -20,8 +18,7 @@ export class ChannelController {
 
       // For DM channels, ensure both users are included as members
       if (name.startsWith('dm-')) {
-        console.log('Creating DM channel...');
-        
+                
         // Validate members array
         if (!Array.isArray(members) || members.length !== 2) {
           console.error('Invalid members array:', members);
@@ -30,8 +27,7 @@ export class ChannelController {
         }
 
         // Get both users' information
-        console.log('Finding users:', members);
-        const [user1, user2] = await Promise.all([
+                const [user1, user2] = await Promise.all([
           prisma.user.findUnique({ where: { id: members[0] } }),
           prisma.user.findUnique({ where: { id: members[1] } })
         ]);
@@ -42,16 +38,12 @@ export class ChannelController {
           return;
         }
 
-        console.log('Found users:', { user1: user1.username, user2: user2.username });
-
         // Generate DM channel name with 'dm-' prefix
         const dmChannelName = `dm-${user1.username}-${user2.username}`;
-        console.log('Generated DM channel name:', dmChannelName);
-
+        
         // Check if DM channel already exists (check both name combinations)
         const alternativeDmChannelName = `dm-${user2.username}-${user1.username}`;
-        console.log('Checking for existing channels with names:', { dmChannelName, alternativeDmChannelName });
-        
+                
         const existingChannel = await prisma.channel.findFirst({
           where: {
             OR: [
@@ -79,13 +71,11 @@ export class ChannelController {
         });
 
         if (existingChannel) {
-          console.log('Found existing DM channel:', existingChannel.id);
-          res.json(existingChannel);
+                    res.json(existingChannel);
           return;
         }
 
-        console.log('Creating new DM channel...');
-        // Create new DM channel with both users
+                // Create new DM channel with both users
         try {
           const channel = await prisma.channel.create({
             data: {
@@ -107,8 +97,7 @@ export class ChannelController {
             }
           });
 
-          console.log('DM channel created successfully:', channel.id);
-          io.emit('channel:created', channel);
+                    io.emit('channel:created', channel);
           res.status(201).json(channel);
           return;
         } catch (error) {
@@ -118,8 +107,7 @@ export class ChannelController {
       }
 
       // For regular channels
-      console.log('Creating regular channel...');
-      const channel = await prisma.channel.create({
+            const channel = await prisma.channel.create({
         data: {
           name,
           isPrivate: isPrivate || false,
@@ -139,8 +127,7 @@ export class ChannelController {
         }
       });
 
-      console.log('Regular channel created successfully:', channel.id);
-      io.emit('channel:created', channel);
+            io.emit('channel:created', channel);
       res.status(201).json(channel);
     } catch (error) {
       console.error('Error in createChannel:', error);
@@ -202,8 +189,6 @@ export class ChannelController {
       const { channelId } = req.params;
       const userId = req.auth.userId;
 
-      console.log('Leave channel request:', { channelId, userId });
-
       // First check the current membership status
       const initialCheck = await prisma.channel.findUnique({
         where: { id: channelId },
@@ -218,8 +203,7 @@ export class ChannelController {
       });
 
       if (!initialCheck) {
-        console.log('Channel not found during initial check:', channelId);
-        res.status(404).json({ message: 'Channel not found' });
+                res.status(404).json({ message: 'Channel not found' });
         return;
       }
 
@@ -239,8 +223,7 @@ export class ChannelController {
       });
 
       if (!channel) {
-        console.log('Channel not found:', channelId);
-        res.status(404).json({ message: 'Channel not found' });
+                res.status(404).json({ message: 'Channel not found' });
         return;
       }
 
@@ -252,14 +235,12 @@ export class ChannelController {
       });
 
       if (!existingMember) {
-        console.log('User not a member:', { userId, channelId });
-        res.status(400).json({ message: 'Not a member of this channel' });
+                res.status(400).json({ message: 'Not a member of this channel' });
         return;
       }
 
       if (channel.ownerId === userId) {
-        console.log('Owner attempted to leave:', { userId, channelId });
-        res.status(400).json({ message: 'Channel owner cannot leave the channel' });
+                res.status(400).json({ message: 'Channel owner cannot leave the channel' });
         return;
       }
 
@@ -319,8 +300,6 @@ export class ChannelController {
         return;
       }
 
-      console.log('Fetching channels for user:', userId);
-
       // Check if this is the user's first login by looking for any channel membership
       const userChannelCount = await prisma.user.findUnique({
         where: { id: userId },
@@ -335,8 +314,7 @@ export class ChannelController {
 
       // Only auto-join public channels if user has no channel memberships
       if (userChannelCount?._count.channels === 0) {
-        console.log('First login detected - auto-joining public channels');
-        
+                
         // Find all public channels except the public files channel
         const publicChannels = await prisma.channel.findMany({
           where: {
@@ -567,8 +545,6 @@ export class ChannelController {
       const { channelId } = req.params;
       const userId = req.auth.userId;
 
-      console.log('Delete channel request:', { channelId, userId });
-
       const channel = await prisma.channel.findUnique({
         where: { id: channelId },
         include: {
@@ -582,20 +558,17 @@ export class ChannelController {
       });
 
       if (!channel) {
-        console.log('Channel not found:', channelId);
-        res.status(404).json({ message: 'Channel not found' });
+                res.status(404).json({ message: 'Channel not found' });
         return;
       }
 
       if (channel.ownerId !== userId) {
-        console.log('Non-owner attempted to delete channel:', { userId, ownerId: channel.ownerId });
-        res.status(403).json({ message: 'Only the channel owner can delete the channel' });
+                res.status(403).json({ message: 'Only the channel owner can delete the channel' });
         return;
       }
 
       // Delete in correct order to handle foreign key constraints
-      console.log('Starting channel deletion process...');
-
+      
       // 1. Delete all reactions for messages in this channel
       await prisma.reaction.deleteMany({
         where: {
@@ -604,22 +577,18 @@ export class ChannelController {
           }
         }
       });
-      console.log('Deleted all reactions in channel');
-
+      
       // 2. Delete all messages in this channel (this will cascade to thread messages)
       await prisma.message.deleteMany({
         where: {
           channelId: channelId
         }
       });
-      console.log('Deleted all messages in channel');
-
+      
       // 3. Finally delete the channel
       await prisma.channel.delete({
         where: { id: channelId }
       });
-
-      console.log('Channel deleted successfully:', channelId);
 
       // Notify all members that the channel was deleted
       io.emit('channel:deleted', { 

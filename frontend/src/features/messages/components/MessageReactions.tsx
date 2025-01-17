@@ -29,21 +29,17 @@ export const MessageReactions: React.FC<MessageReactionsProps> = ({
   const [showPicker, setShowPicker] = useState(false);
 
   const handleReactionClick = async (emoji: string) => {
-    console.log('Clicking existing reaction:', emoji);
-    const hasReacted = reactions[emoji]?.some(user => user.id === userId);
+        const hasReacted = reactions[emoji]?.some(user => user.id === userId);
     
     if (hasReacted) {
-      console.log('Removing reaction:', emoji);
-      onReactionRemove?.(messageId, emoji);
+            onReactionRemove?.(messageId, emoji);
     } else {
-      console.log('Adding reaction:', emoji);
-      onReactionAdd?.(messageId, emoji);
+            onReactionAdd?.(messageId, emoji);
     }
   };
 
   const handleAddReaction = (emoji: string) => {
-    console.log('Selected emoji from picker:', emoji);
-    onReactionAdd?.(messageId, emoji);
+        onReactionAdd?.(messageId, emoji);
     setShowPicker(false);
   };
 

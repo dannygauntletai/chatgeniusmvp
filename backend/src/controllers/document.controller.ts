@@ -6,10 +6,7 @@ const documentService = new DocumentService();
 export class DocumentController {
   async processWebhook(req: Request, res: Response) {
     try {
-      console.log('\n=== DOCUMENT WEBHOOK RECEIVED ===');
-      console.log('Request body:', req.body);
-      console.log('Request headers:', req.headers);
-
+                  
       const { file_id, file_url, channel_id, uploader_id, name, type } = req.body;
       
       if (!file_id || !file_url) {

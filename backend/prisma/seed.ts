@@ -22,10 +22,8 @@ async function main() {
         status: 'online'
       }
     });
-    console.log('Created assistant bot:', assistantBot);
-  } else {
-    console.log('Assistant bot already exists:', existingBot);
-  }
+      } else {
+      }
 
   // Create test user
   const user = await prisma.user.upsert({
@@ -53,8 +51,7 @@ async function main() {
     },
   });
 
-  console.log({ user, channel });
-}
+  }
 
 main()
   .catch((e) => {

@@ -98,16 +98,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
 
   const handleThreadClick = async () => {
     if (message.id.startsWith('temp-')) {
-      console.log('Message is still being saved, waiting...');
-      return;
+            return;
     }
     openThread(message.id, message);
   };
 
   const handleReactionAdd = async (messageId: string, emoji: string) => {
     try {
-      console.log('Adding reaction to message:', messageId, emoji);
-      setMessage(prevMessage => {
+            setMessage(prevMessage => {
         const updatedReactions = { ...prevMessage.reactions };
         if (!updatedReactions[emoji]) {
           updatedReactions[emoji] = [];
@@ -133,8 +131,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
 
   const handleReactionRemove = async (messageId: string, emoji: string) => {
     try {
-      console.log('Removing reaction from message:', messageId, emoji);
-      setMessage(prevMessage => {
+            setMessage(prevMessage => {
         const updatedReactions = { ...prevMessage.reactions };
         if (updatedReactions[emoji]) {
           updatedReactions[emoji] = updatedReactions[emoji].filter(

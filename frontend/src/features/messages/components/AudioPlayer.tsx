@@ -15,11 +15,9 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ url }) => {
     useEffect(() => {
         if (audioRef.current) {
             const audio = audioRef.current;
-            console.log('Audio element created:', audio);
-            
+                        
             const handleLoadedMetadata = () => {
-                console.log('Metadata loaded, duration:', audio.duration);
-                setAudioDuration(audio.duration);
+                                setAudioDuration(audio.duration);
                 setIsLoading(false);
             };
             
@@ -59,8 +57,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ url }) => {
     const handleTimeUpdate = () => {
         if (audioRef.current) {
             const audio = audioRef.current;
-            console.log('Time update - Current:', audio.currentTime, 'Duration:', audio.duration);
-            setCurrentTime(audio.currentTime);
+                        setCurrentTime(audio.currentTime);
             setProgress((audio.currentTime / audio.duration) * 100);
         }
     };

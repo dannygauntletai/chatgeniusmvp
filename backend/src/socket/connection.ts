@@ -37,8 +37,7 @@ const processBatch = (channelId: string, io: Server) => {
 
 export const initializeSocket = (io: Server) => {
   io.on('connection', async (socket) => {
-    console.log('Client connected:', socket.id);
-
+    
     // Ensure we have userId before setting up event handlers
     if (!socket.data.userId) {
       console.error('Socket connection missing userId');
@@ -100,8 +99,7 @@ export const initializeSocket = (io: Server) => {
     }
 
     socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
-      // Clean up any pending message batches
+            // Clean up any pending message batches
       messageBatches.forEach((batch, channelId) => {
         if (batch.timer) {
           clearTimeout(batch.timer);

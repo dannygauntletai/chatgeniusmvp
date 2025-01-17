@@ -178,52 +178,41 @@ const MessageListContent = () => {
     let mounted = true;
     setLoading(true);
 
-    console.log('Setting up socket listeners for channel:', activeChannel.id);
-    console.log('Socket connected?', socket.connected);
-
     // Join channel room and wait for acknowledgment
     const joinChannel = async () => {
       return new Promise<void>((resolve, reject) => {
-        console.log('Attempting to join channel:', activeChannel.id);
-        
+                
         const timeout = setTimeout(() => {
-          console.log('Channel join timeout');
-          socket.off('channel:joined');
+                    socket.off('channel:joined');
           socket.off('channel:error');
           reject(new Error('Channel join timeout'));
         }, 5000);
 
         socket.once('channel:joined', ({ channelId }: ChannelJoinedEvent) => {
-          console.log('Received channel:joined event for channel:', channelId);
-          if (channelId === activeChannel.id) {
+                    if (channelId === activeChannel.id) {
             clearTimeout(timeout);
             resolve();
           }
         });
 
         socket.once('channel:error', ({ error }: ChannelErrorEvent) => {
-          console.log('Received channel:error event:', error);
-          clearTimeout(timeout);
+                    clearTimeout(timeout);
           reject(new Error(error));
         });
 
-        console.log('Emitting channel:join event');
-        socket.emit('channel:join', activeChannel.id);
+                socket.emit('channel:join', activeChannel.id);
       });
     };
 
     // Load messages after joining channel
     const loadMessages = async () => {
       try {
-        console.log('Starting loadMessages');
-        // Wait for channel join acknowledgment
+                // Wait for channel join acknowledgment
         await joinChannel();
-        console.log('Successfully joined channel');
-        if (!mounted) return;
+                if (!mounted) return;
 
         const data = await MessageService.getChannelMessages(activeChannel.id);
-        console.log('Loaded initial messages:', data.length);
-        if (!mounted) return;
+                if (!mounted) return;
 
         setMessages(data.filter(message => !message.threadId));
         setError(null);
@@ -252,21 +241,17 @@ const MessageListContent = () => {
       });
 
       if (!mounted) {
-        console.log('❌ Component not mounted, ignoring message');
-        return;
+                return;
       }
       
       if (message.channelId === activeChannel.id && !message.threadId) {
-        console.log('✅ Message matches current channel, updating state');
-        setMessages(prev => {
+                setMessages(prev => {
           // Check for duplicates
           const isDuplicate = prev.some(m => m.id === message.id);
           if (isDuplicate) {
-            console.log('⚠️ Duplicate message detected, skipping update');
-            return prev;
+                        return prev;
           }
-          console.log('✨ Adding new message to state');
-          return [...prev, message];
+                    return [...prev, message];
         });
       } else {
         console.log('❌ Message filtered out:', {
@@ -279,17 +264,14 @@ const MessageListContent = () => {
     };
 
     // Listen for real-time message updates
-    console.log('Setting up message:created listener');
-    socket.on('message:created', handleNewMessage);
+        socket.on('message:created', handleNewMessage);
 
     return () => {
-      console.log('Cleaning up socket listeners');
-      mounted = false;
+            mounted = false;
       socket.off('message:created', handleNewMessage);
       
       // Leave channel room and wait for acknowledgment
-      console.log('Leaving channel:', activeChannel.id);
-      const leavePromise = new Promise<void>((resolve, reject) => {
+            const leavePromise = new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           socket.off('channel:left');
           socket.off('channel:error');
@@ -297,16 +279,14 @@ const MessageListContent = () => {
         }, 5000);
 
         socket.once('channel:left', ({ channelId }: ChannelLeftEvent) => {
-          console.log('Received channel:left event for channel:', channelId);
-          if (channelId === activeChannel.id) {
+                    if (channelId === activeChannel.id) {
             clearTimeout(timeout);
             resolve();
           }
         });
 
         socket.once('channel:error', ({ error }: ChannelErrorEvent) => {
-          console.log('Received channel:error event:', error);
-          clearTimeout(timeout);
+                    clearTimeout(timeout);
           reject(new Error(error));
         });
 

@@ -12,11 +12,8 @@ import { setAuthToken } from './services/api.service';
 import { socket, connectSocket, disconnectSocket } from './services/socket.service';
 import { LoadingSpinner } from './features/shared/components/LoadingSpinner';
 
-console.log('App component rendering');
-
 const LoggedHomePage = () => {
-  console.log('Rendering HomePage within SignedOut');
-  return <HomePage />;
+    return <HomePage />;
 };
 
 const DashboardLayout = () => {
@@ -82,8 +79,7 @@ const DashboardLayout = () => {
 
     // Listen for token expiry events from socket
     socket.on('auth:token_expired', () => {
-      console.log('Token expired event received, refreshing auth...');
-      setupAuth();
+            setupAuth();
     });
 
     setupAuth();
