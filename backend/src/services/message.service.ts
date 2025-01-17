@@ -151,6 +151,10 @@ export class MessageService {
       }
     }
 
+    if (data.providedUserId === process.env.ASSISTANT_BOT_USER_ID) {
+      return message;
+    }
+
     // Check if this is a DM and if we should generate an AI response
     if (message.channel.name.startsWith('dm-') && message.user.id !== process.env.ASSISTANT_BOT_USER_ID) {
       console.log('\n=== CHECKING FOR AI RESPONSE ===');
@@ -221,81 +225,7 @@ export class MessageService {
         console.error('Error handling AI response:', error);
       }
     }
-
-    // Check if message mentions assistant (only if not already handled as DM)
-    else if (message.content.toLowerCase().includes('@assistant')) {
-      console.log('\n=== ASSISTANT MENTION DETECTED ===');
-      console.log('Message content:', message.content);
-      
-      // Send typing indicator
-      io.to(message.channelId).emit('user:typing', {
-        channelId: message.channelId,
-        userId: process.env.ASSISTANT_BOT_USER_ID,
-        typing: true
-      });
-
-      const channel = await prisma.channel.findUnique({
-        where: { id: message.channelId }
-      });
-      
-      if (!channel) {
-        console.log('Channel not found:', message.channelId);
-        io.to(message.channelId).emit('user:typing', {
-          channelId: message.channelId,
-          userId: process.env.ASSISTANT_BOT_USER_ID,
-          typing: false
-        });
-        return message;
-      }
-
-      console.log('Channel found:', {
-        id: channel.id,
-        name: channel.name,
-        type: channel.isPrivate ? 'private' : 'public'
-      });
-
-      try {
-        console.log('Calling getAssistantResponse with:', {
-          messageId: message.id,
-          channelId: channel.id,
-          userId: message.userId
-        });
-
-        // Get assistant response (handles both normal queries and channel summaries)
-        const response = await assistantService.getAssistantResponse(
-          message.content,
-          channel,
-          message.userId
-        );
-
-        console.log('Got response from assistant service:', response);
-
-        // Create assistant's response message
-        await this.create({
-          content: response,
-          channelId: message.channelId,
-          userId: process.env.ASSISTANT_BOT_USER_ID!, // Bot user ID from env
-          threadId: message.threadId || undefined // Maintain thread context if it exists
-        });
-      } catch (error) {
-        console.error('Error getting assistant response:', error);
-        // Create error message with explicit assistant user ID
-        await this.create({
-          content: "I apologize, but I'm having trouble processing your request at the moment. Please try again later.",
-          channelId: message.channelId,
-          providedUserId: process.env.ASSISTANT_BOT_USER_ID!,  // Explicitly use providedUserId
-          threadId: message.threadId || undefined
-        });
-      } finally {
-        // Always stop typing indicator
-        io.to(message.channelId).emit('user:typing', {
-          channelId: message.channelId,
-          userId: process.env.ASSISTANT_BOT_USER_ID,
-          typing: false
-        });
-      }
-    }
-
+    
     return message;
   }
 
