@@ -213,6 +213,11 @@ class UserMessagesRequest(BaseModel):
     query: Optional[str] = ""  # Optional query for filtering messages
     sender_name: Optional[str] = None  # Optional sender name for additional filtering
 
+class ChannelMessagesRequest(BaseModel):
+    channel_id: str
+    query: str
+    top_k: int = 100
+
 # Initialize managers and services
 vector_store_manager = VectorStoreManager()
 query_analyzer = QueryAnalyzer(openai_client)
@@ -439,39 +444,32 @@ async def get_index_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/retrieve/channel", response_model=RetrieveResponse)
-async def retrieve_similar_channel_messages(
-    query: str = Body(...),
-    channel_id: str = Body(...),
-    top_k: int = Body(10),
-    threshold: float = Body(0.3)
-):
-    """Retrieve similar messages from a specific channel using vector similarity search."""
+async def retrieve_similar_channel_messages(request: ChannelMessagesRequest):
+    """Retrieve messages from a specific channel."""
     try:
         with tracing_v2_enabled():
-            logging.info(f"Retrieving channel messages for query: {query}")
+            logging.info(f"Retrieving messages for channel: {request.channel_id}")
             
             # Build filter for channel-specific search
             filter_dict = {
-                "channel_id": channel_id
+                "channel_id": request.channel_id
             }
             
-            # Search for relevant content
+            # Search for content
             chat_results = await vector_store_manager.search_chat_messages(
-                query,
-                top_k,
+                request.query,
+                request.top_k,
                 filter_dict
             )
             
             # Process results
             messages = []
             for doc, score in chat_results:
-                if score < threshold:
-                    continue
                 if msg := ResultFormatter.format_chat_result(doc, score):
                     messages.append(msg)
             
             return RetrieveResponse(
-                query=query,
+                query=request.query,
                 messages=messages
             )
                 

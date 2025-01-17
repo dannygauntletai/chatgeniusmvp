@@ -99,22 +99,21 @@ export class AssistantService {
     console.log('UserId:', userId);
 
     try {
-      // If this is a channel query (summarize, etc.)
-      const isChannelQuery = message.content.toLowerCase().includes('@assistant') && (
-        message.content.toLowerCase().includes('summarize') || 
+      // Check if this is a channel query (summarize, etc.)
+      const isChannelQuery = message.content.toLowerCase().includes('summarize') || 
         message.content.toLowerCase().includes('summary') ||
         message.content.toLowerCase().includes('what') ||
         message.content.toLowerCase().includes('who') ||
         message.content.toLowerCase().includes('when') ||
         message.content.toLowerCase().includes('where') ||
         message.content.toLowerCase().includes('why') ||
-        message.content.toLowerCase().includes('how')
-      );
+        message.content.toLowerCase().includes('how');
 
       console.log('Is channel query:', isChannelQuery);
       
+      // Use summarize endpoint for channel queries
       if (isChannelQuery) {
-        console.log('Channel query detected, using summarize endpoint...');
+        console.log('Using summarize endpoint for channel query...');
         
         const response = await fetch(`${this.assistantUrl}/assistant/summarize/${channel.id}`, {
           method: 'POST',
@@ -144,8 +143,8 @@ export class AssistantService {
         return data.response;
       }
 
-      console.log('Normal query detected, getting sender info...');
-      // For normal assistant queries
+      // For direct messages to the assistant
+      console.log('Using chat endpoint for direct assistant interaction...');
       const sender = await prisma.user.findUnique({
         where: { id: userId },
         select: {
@@ -162,7 +161,7 @@ export class AssistantService {
         username: sender?.username || 'User'
       };
 
-      console.log('Sending normal assistant request to:', `${this.assistantUrl}/assistant/chat`);
+      console.log('Sending request to:', `${this.assistantUrl}/assistant/chat`);
       console.log('Request body:', JSON.stringify(requestBody, null, 2));
       
       const response = await fetch(`${this.assistantUrl}/assistant/chat`, {

@@ -10,7 +10,7 @@ from langchain_core.documents import Document
 from langchain_pinecone import PineconeVectorStore
 import json
 from models import AssistantResponse, Message, RetrieveRequest, RichContent, RetrieveResponse
-from routers.vector import retrieve_similar_user_messages, retrieve_similar_channel_messages, UserMessagesRequest
+from routers.vector import retrieve_similar_user_messages, retrieve_similar_channel_messages, UserMessagesRequest, ChannelMessagesRequest, retrieve_similar_messages
 from langsmith import Client
 from langchain_core.tracers.context import tracing_v2_enabled
 from utils import get_prisma
@@ -145,7 +145,21 @@ Important: Never acknowledge being AI, never apologize, never explain. Simply BE
         completion = await self.client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": context},
+                {
+                    "role": "system",
+                    "content": f"""You are ChatGenius, a helpful and engaging AI assistant. You help users by providing direct, actionable responses based on available context and knowledge.
+
+Here is relevant context that may help with the response:
+{context}
+
+Important guidelines:
+1. Be direct and helpful in your responses
+2. If answering questions, provide clear, specific answers
+3. If the user shares something, engage naturally and supportively
+4. Use context when relevant, but don't analyze or comment on the conversation itself
+5. Stay focused on being helpful rather than observing or analyzing
+6. Never apologize or mention being an AI - just be helpful"""
+                },
                 {"role": "user", "content": f"{username}: {message}"}
             ],
             temperature=TEMPERATURE,
@@ -273,6 +287,10 @@ class OfflineRequest(BaseModel):
     sender_name: Optional[str] = None
     limit: int = 100
 
+class SummarizeRequest(BaseModel):
+    query: str
+    limit: int = 100
+
 # Initialize components
 openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 assistant_manager = AssistantManager(openai_client)
@@ -343,7 +361,7 @@ async def chat(
                     confidence=0.9
                 )
             
-            # For non-impersonation cases, use the existing logic
+            # For non-impersonation cases, use retrieve_similar_messages to search across all content
             request = RetrieveRequest(
                 query=message,
                 channel_id=channel_id,
@@ -352,10 +370,9 @@ async def chat(
                 top_k=TOP_K,
                 threshold=SIMILARITY_THRESHOLD
             )
-            
+
             retrieve_response = await retrieve_similar_messages(request)
             similar_messages = retrieve_response.messages
-            
             context = await assistant_manager.build_context(similar_messages)
             response = await assistant_manager.generate_response(username, message, context)
             
@@ -405,26 +422,18 @@ async def c(
 @router.post("/summarize/{channel_id}", response_model=AssistantResponse)
 async def summarize_channel(
     channel_id: str,
-    query: str = Body(...),  # The specific query or "summarize" request
-    limit: int = Body(100),   # How many messages to consider
-    user_id: Optional[str] = Body(None)  # Optional user_id to filter messages
+    request: SummarizeRequest
 ):
     """Generate a summary or answer questions about a specific channel using vector search."""
     try:
         # Get messages from vector store
-        request = RetrieveRequest(
-            query=query,
-            channel_id=channel_id,
-            channel_type="channel_query",
-            top_k=limit,
-            threshold=SIMILARITY_THRESHOLD
+        retrieve_response = await retrieve_similar_channel_messages(
+            ChannelMessagesRequest(
+                channel_id=channel_id,
+                query=request.query,
+                top_k=request.limit
+            )
         )
-        
-        # Only set user_id if it's provided
-        if user_id:
-            request.user_id = user_id
-            
-        retrieve_response = await retrieve_similar_messages(request)
 
         if not retrieve_response.messages:
             return AssistantResponse(
@@ -443,7 +452,7 @@ async def summarize_channel(
                 {
                     "role": "system",
                     "content": f"""You are analyzing a chat channel. Your task is to provide a detailed response based on the channel's content.
-The query is: {query}
+The query is: {request.query}
 
 Here is the relevant content from the channel:
 {context}
