@@ -15,57 +15,63 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ url }) => {
     useEffect(() => {
         if (audioRef.current) {
             const audio = audioRef.current;
-                        
+            
             const handleLoadedMetadata = () => {
-                                setAudioDuration(audio.duration);
+                setAudioDuration(audio.duration);
                 setIsLoading(false);
             };
             
+            const handleTimeUpdate = () => {
+                setCurrentTime(audio.currentTime);
+                setProgress((audio.currentTime / audio.duration) * 100);
+            };
+            
+            const handleEnded = () => {
+                setIsPlaying(false);
+                setProgress(0);
+                setCurrentTime(0);
+            };
+
+            const handleCanPlay = () => {
+                setIsLoading(false);
+            };
+
             const handleError = (e: ErrorEvent) => {
-                console.error('Audio loading error:', e);
+                console.error('Audio error:', e);
                 setIsLoading(false);
             };
             
             audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-            audio.addEventListener('error', handleError);
             audio.addEventListener('timeupdate', handleTimeUpdate);
             audio.addEventListener('ended', handleEnded);
+            audio.addEventListener('canplay', handleCanPlay);
+            audio.addEventListener('error', handleError);
             
-            // Force load the audio
-            audio.load();
+            // Reset state when URL changes
+            setIsPlaying(false);
+            setProgress(0);
+            setCurrentTime(0);
+            setIsLoading(true);
             
             return () => {
                 audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-                audio.removeEventListener('error', handleError);
                 audio.removeEventListener('timeupdate', handleTimeUpdate);
                 audio.removeEventListener('ended', handleEnded);
+                audio.removeEventListener('canplay', handleCanPlay);
+                audio.removeEventListener('error', handleError);
             };
         }
-    }, [url]);  // Add url as dependency to reload when URL changes
+    }, [url]);
 
     const togglePlayPause = () => {
         if (audioRef.current) {
             if (isPlaying) {
                 audioRef.current.pause();
             } else {
-                audioRef.current.play();
+                audioRef.current.play().catch(console.error);
             }
             setIsPlaying(!isPlaying);
         }
-    };
-
-    const handleTimeUpdate = () => {
-        if (audioRef.current) {
-            const audio = audioRef.current;
-                        setCurrentTime(audio.currentTime);
-            setProgress((audio.currentTime / audio.duration) * 100);
-        }
-    };
-
-    const handleEnded = () => {
-        setIsPlaying(false);
-        setProgress(0);
-        setCurrentTime(0);
     };
 
     const formatTime = (seconds: number) => {
@@ -111,7 +117,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ url }) => {
                 </div>
             </div>
 
-            <audio ref={audioRef} src={url} preload="metadata" />
+            <audio ref={audioRef} src={url} preload="auto" />
         </div>
     );
 }; 

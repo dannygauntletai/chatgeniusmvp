@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Message } from '../types/message.types';
 import { formatRelativeTime } from '../../../utils/date';
@@ -24,6 +24,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const { openThread } = useThread();
   const { userId, username } = useUserContext();
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const handleMessageCreated = (newMessage: Message) => {
@@ -96,6 +98,15 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
     };
   }, [message.id]);
 
+  useEffect(() => {
+    // Cleanup audio on unmount
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, []);
+
   const handleThreadClick = async () => {
     if (message.id.startsWith('temp-')) {
             return;
@@ -154,22 +165,85 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
     }
   };
 
-  const isOwnMessage = message.userId === userId;
   const isAssistantMessage = message.userId === ASSISTANT_BOT_USER_ID;
 
   const handleTextToSpeech = async () => {
     try {
-      const response = await fetch("https://api.kokorotts.com/v1/audio/speech", {
+      // If already playing, stop and cleanup
+      if (isPlaying && audioRef.current) {
+        console.log('Stopping current playback');
+        audioRef.current.pause();
+        setIsPlaying(false);
+        return;
+      }
+
+      console.log('Starting TTS request...');
+      const startTime = performance.now();
+
+      // Check cache first
+      const CACHE_NAME = 'tts-cache-v1';
+      const cache = await caches.open(CACHE_NAME);
+      const cacheKey = `tts-${message.content}`; // Use text as key
+      const cachedResponse = await cache.match(cacheKey);
+
+      if (cachedResponse) {
+        console.log('Found cached audio');
+        const blob = await cachedResponse.blob();
+        if (!audioRef.current) {
+          audioRef.current = new Audio();
+          audioRef.current.addEventListener('ended', () => {
+            console.log('Audio playback ended');
+            setIsPlaying(false);
+          });
+        }
+        audioRef.current.src = URL.createObjectURL(blob);
+        await audioRef.current.play();
+        setIsPlaying(true);
+        return;
+      }
+
+      // Create MediaSource instance
+      const mediaSource = new MediaSource();
+      let sourceBuffer: SourceBuffer | null = null;
+      
+      // Create audio element if it doesn't exist
+      if (!audioRef.current) {
+        audioRef.current = new Audio();
+        audioRef.current.addEventListener('ended', () => {
+          console.log('Audio playback ended');
+          setIsPlaying(false);
+        });
+      }
+
+      // Set up MediaSource
+      const sourceOpenPromise = new Promise<void>((resolve) => {
+        mediaSource.addEventListener('sourceopen', () => {
+          console.log('MediaSource opened');
+          sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
+          sourceBuffer.mode = 'sequence';
+          resolve();
+        });
+      });
+
+      // Set audio source to MediaSource URL
+      const mediaSourceUrl = URL.createObjectURL(mediaSource);
+      audioRef.current.src = mediaSourceUrl;
+      
+      // Start the TTS request
+      const response = await fetch("https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM/stream", {
         method: 'POST',
         headers: {
+          'Accept': 'audio/mpeg',
           'Content-Type': 'application/json',
+          'xi-api-key': import.meta.env.VITE_ELEVENLABS_API_KEY,
         },
         body: JSON.stringify({
-          model: "kokoro",
-          input: message.content,
-          voice: "af_bella",
-          response_format: "mp3",
-          speed: 1.0
+          text: message.content,
+          model_id: "eleven_monolingual_v1",
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75
+          }
         })
       });
 
@@ -177,29 +251,79 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
         throw new Error('Failed to generate speech');
       }
 
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      setAudioUrl(url);
+      // Clone the response for caching
+      const responseClone = response.clone();
+      cache.put(cacheKey, responseClone);
+
+      console.log(`Response received in ${(performance.now() - startTime).toFixed(2)}ms`);
+
+      // Wait for MediaSource to be ready
+      await sourceOpenPromise;
+      
+      let isFirstChunk = true;
+      const reader = response.body?.getReader();
+      let totalSize = 0;
+
+      console.log('Starting to receive and play chunks...');
+
+      if (reader && sourceBuffer) {
+        while (true) {
+          const { done, value } = await reader.read();
+          const typedSourceBuffer = sourceBuffer as SourceBuffer;
+
+
+          if (done) {
+            console.log('Stream complete');
+            if (mediaSource.readyState === 'open') {
+              if (typedSourceBuffer.updating) {
+                  await new Promise<void>(resolve => {
+                      typedSourceBuffer.addEventListener('updateend', () => {
+                          if (!typedSourceBuffer.updating) {
+                              mediaSource.endOfStream();
+                          }
+                          resolve();
+                      }, { once: true });
+                  });
+                } else {
+                    mediaSource.endOfStream();
+                }
+            }
+            break;
+          }
+
+          totalSize += value.length;
+          console.log(`Received chunk: ${value.length} bytes (Total: ${(totalSize / 1024).toFixed(2)}KB)`);
+
+          // Wait for previous updates to complet
+          if (typedSourceBuffer.updating) {
+            await new Promise<void>(resolve => {
+              typedSourceBuffer.addEventListener('updateend', () => resolve(), {
+                    once: true 
+                });
+            });
+          }
+
+          // Append the chunk to the source buffer
+          typedSourceBuffer.appendBuffer(value);
+
+          // Start playing after receiving the first chunk
+          if (isFirstChunk) {
+            console.log('Starting playback with first chunk');
+            await audioRef.current.play();
+            setIsPlaying(true);
+            isFirstChunk = false;
+            console.log(`Time to first playback: ${(performance.now() - startTime).toFixed(2)}ms`);
+          }
+        }
+      }
+
     } catch (error) {
       console.error('Failed to generate speech:', error);
+      setIsPlaying(false);
     }
   };
 
   const renderContent = () => {
-    // Check if we have a TTS audio URL
-    if (audioUrl) {
-      return (
-        <>
-          <div className="mt-1 text-sm text-white">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
-          </div>
-          <div className="mt-2">
-            <AudioPlayer url={audioUrl} />
-          </div>
-        </>
-      );
-    }
-
     // Check if the content is an MP3 link
     if (message.content.trim().toLowerCase().endsWith('.mp3')) {
       const displayText = message.content.length > 60 ? message.content.substring(0, 57) + '...' : message.content;
@@ -268,7 +392,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
                   className="inline-flex items-center p-1.5 text-xs font-medium rounded-full text-gray-700 bg-gray-100 hover:bg-gray-200"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
                   </svg>
                 </button>
               ) : !isAssistantMessage && (
