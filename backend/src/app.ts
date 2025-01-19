@@ -96,8 +96,9 @@ const errorHandlerMiddleware: ErrorRequestHandler = (err: Error, req: Request, r
 app.use(errorHandlerMiddleware);
 
 // Server configuration
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.BACKEND_PORT || 5000;
 httpServer.listen(PORT, () => {
-  });
+  console.log(`Backend server listening on port ${PORT}`);
+});
 
 export { app, io }; 
