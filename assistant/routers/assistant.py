@@ -393,14 +393,14 @@ Be direct and helpful in your responses. You can reference the channel and user 
 
 @router.post("/call-status")
 async def c(
-    _request: Request,
+    request: Request,
     CallSid: str = Body(...),
     CallStatus: str = Body(None),
     RecordingSid: str = Body(None),
     RecordingUrl: str = Body(None),
     RecordingDuration: int = Body(None),
     RecordingStatus: str = Body(None),
-    _AccountSid: str = Body(None),
+    AccountSid: str = Body(None),
     ChannelId: str = Body(None),
     UserId: str = Body(None)
 ):
