@@ -1,0 +1,13 @@
+[MESSAGES CONTROL]
+disable=C0111,  # missing-docstring
+        C0103,  # invalid-name
+        W0611,  # unused-import
+
+[FORMAT]
+max-line-length=100
+
+[BASIC]
+good-names=i,j,k,ex,Run,_,id
+
+[TYPECHECK]
+ignored-modules=numpy,tensorflow,torch,cv2

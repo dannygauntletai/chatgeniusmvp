@@ -58,7 +58,7 @@ class PhoneServiceClient:
             print(f"Error in extract_call_details: {str(e)}")  # Debug print
             raise
     
-    async def make_call(self, to_number: str, message: str, from_number: Optional[str] = None, channel_id: str = None, user_id: str = None, thread_id: Optional[str] = None) -> Dict:
+    async def make_call(self, to_number: str, message: str, channel_id: str = None, user_id: str = None, thread_id: Optional[str] = None) -> Dict:
         """Make a phone call with a message."""
         await self._ensure_session()
         

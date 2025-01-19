@@ -2,22 +2,12 @@ from fastapi import APIRouter, HTTPException, Body, Request
 from typing import List, Dict, Any, Optional
 import os
 from dotenv import load_dotenv
-import httpx
 from openai import AsyncOpenAI
-from pinecone import Pinecone
-from langchain_openai import OpenAIEmbeddings
-from langchain_core.documents import Document
-from langchain_pinecone import PineconeVectorStore
-import json
 from models import AssistantResponse, Message, RetrieveRequest, RichContent, RetrieveResponse
 from routers.vector import retrieve_similar_user_messages, retrieve_similar_channel_messages, UserMessagesRequest, ChannelMessagesRequest, retrieve_similar_messages
-from langsmith import Client
-from langchain_core.tracers.context import tracing_v2_enabled
 from utils import get_prisma
 from clients.phone_client import PhoneServiceClient
 import logging
-from datetime import datetime
-import asyncio
 from pydantic import BaseModel
 
 # Load environment variables
@@ -45,7 +35,7 @@ class AssistantManager:
     async def __aenter__(self):
         return self
         
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, _exc_type, _exc_val, _exc_tb):
         if hasattr(self, 'phone_client'):
             await self.phone_client.close()
 

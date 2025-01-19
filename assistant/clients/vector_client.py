@@ -1,6 +1,6 @@
 from typing import List
 import httpx
-from models import Message, InitializeResponse, RetrieveResponse
+from models import Message, RetrieveResponse
 import asyncio
 from httpx import TimeoutException, ConnectError
 import os

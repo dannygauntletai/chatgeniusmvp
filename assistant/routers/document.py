@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Body
-from typing import List, Dict, Any, Optional
+from typing import List
 import os
 from dotenv import load_dotenv
 from pinecone import Pinecone
@@ -7,11 +7,10 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_pinecone import PineconeVectorStore
 from langchain_core.documents import Document
 from langchain_community.document_loaders.pdf import PyPDFLoader
-from langchain_community.document_loaders import DirectoryLoader, TextLoader
+from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.prompts.prompt import PromptTemplate
 import httpx
-import logging
 from datetime import datetime
 from models import ProcessDocumentResponse, FileObject
 from io import BytesIO
@@ -190,8 +189,6 @@ async def upload_file(
 ):
     """Process an uploaded file and store its chunks in the vector store."""
     try:
-        print(f"\n=== DOCUMENT SERVICE UPLOAD ENDPOINT CALLED ===")
-        
         # Create temporary file
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
             content = await file.read()
@@ -251,16 +248,3 @@ async def upload_file(
     except Exception as e:
         print(f"Error processing document: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@router.delete("/{channel_id}/{file_name}")
-async def delete_document(channel_id: str, file_name: str):
-    """Delete a document and its chunks from the vector store."""
-    try:
-        # Delete chunks and summary by metadata filter
-        chunk_store.delete({"file_name": file_name})
-        summary_store.delete({"file_name": file_name})
-        
-        return {"message": f"Document {file_name} deleted successfully"}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 

@@ -6,9 +6,8 @@ from twilio.rest import Client as TwilioClient
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from openai import AsyncOpenAI
 import logging
-from datetime import datetime
 from models import CallResponse, TranscriptionResponse, RetrieveRequest, Message
-from routers.vector import retrieve_similar_messages, update_vector_db
+from routers.vector import retrieve_similar_messages
 import json
 import asyncio
 import httpx
