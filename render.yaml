@@ -94,4 +94,24 @@ services:
       - key: LANGCHAIN_TRACING_V2
         value: "true"
       - key: LANGCHAIN_PROJECT
-        value: "chatgenius" 
+        value: "chatgenius"
+
+  - type: cron
+    name: restart-assistant
+    schedule: "0 */4 * * *"
+    command: curl -X POST https://api.render.com/v1/services/$ASSISTANT_SERVICE_ID/restart -H "Authorization: Bearer $RENDER_API_KEY"
+    envVars:
+      - key: RENDER_API_KEY
+        sync: false
+      - key: ASSISTANT_SERVICE_ID
+        sync: false
+
+  - type: cron
+    name: restart-backend
+    schedule: "0 */4 * * *"
+    command: curl -X POST https://api.render.com/v1/services/$BACKEND_SERVICE_ID/restart -H "Authorization: Bearer $RENDER_API_KEY"
+    envVars:
+      - key: RENDER_API_KEY
+        sync: false
+      - key: BACKEND_SERVICE_ID
+        sync: false 
