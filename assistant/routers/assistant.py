@@ -10,6 +10,7 @@ from utils import get_prisma
 from clients.phone_client import PhoneServiceClient
 import logging
 from pydantic import BaseModel
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -547,3 +548,8 @@ Important:
     except Exception as e:
         logging.error(f"Error in offline user endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 
+    
+@router.get("/health")
+async def health_check():
+    """Health check endpoint to verify service is running."""
+    return {"status": "healthy", "timestamp": str(datetime.now())}

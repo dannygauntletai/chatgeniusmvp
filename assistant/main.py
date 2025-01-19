@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 from routers import assistant, vector, document, phone
 from utils import get_prisma
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -47,6 +48,14 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     await prisma.disconnect()
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "timestamp": str(datetime.now())
+    }
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
