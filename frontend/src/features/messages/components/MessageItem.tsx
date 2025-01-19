@@ -183,7 +183,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message: initialMessag
       // Check cache first
       const CACHE_NAME = 'tts-cache-v1';
       const cache = await caches.open(CACHE_NAME);
-      const cacheKey = `tts-${message.content}`; // Use text as key
+      const cacheKey = `tts-${message.id}`; // Use text as key
       const cachedResponse = await cache.match(cacheKey);
 
       if (cachedResponse) {

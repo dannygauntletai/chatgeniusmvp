@@ -10,7 +10,6 @@ export class AssistantService {
   }
 
   async shouldGenerateResponse(channel: Channel, recipientId: string): Promise<boolean> {
-    
     // Only generate responses for DM channels
     if (!channel.name.startsWith('dm-')) {
             return false;
@@ -26,7 +25,7 @@ export class AssistantService {
   }
 
   async generateOfflineResponse(message: Message, offlineUser: User, _channel: Channel): Promise<string> {
-                
+    console.log("generateOfflineResponse", message, offlineUser, _channel);
     try {
       // Get the sender's info for context
       const sender = await prisma.user.findUnique({
@@ -69,7 +68,6 @@ export class AssistantService {
   }
 
   async getAssistantResponse(message: string, channel: Channel, userId: string, threadId?: string): Promise<string> {
-        
     const sender = await prisma.user.findUnique({
       where: { id: userId },
       select: {
