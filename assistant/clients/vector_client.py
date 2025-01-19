@@ -45,7 +45,7 @@ class VectorServiceClient:
         channel_id: str,
         channel_type: str,
         top_k: int = 5,
-        threshold: float = 0.3  # Lower default threshold
+        threshold: float = 0.2  # Lower default threshold
     ) -> List[Message]:
         """
         Retrieve messages similar to the query.

@@ -6,13 +6,23 @@ from pinecone import Pinecone, ServerlessSpec
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
 from langchain_pinecone import PineconeVectorStore
-from models import Message, InitializeResponse, RetrieveRequest, RetrieveResponse
+from constants import (
+    CHANNEL_TYPES,
+    CHAT_INDEX_NAME,
+    SUMMARY_NAMESPACE,
+    DOCUMENT_NAMESPACE,
+    SUMMARY_THRESHOLD,
+    DEFAULT_TOP_K
+)
+from models import (
+    Message, InitializeResponse, RetrieveRequest, RetrieveResponse,
+    VectorUpdateRequest, UserMessagesRequest, ChannelMessagesRequest
+)
 import asyncio
 from langsmith import Client
 from langchain_core.tracers.context import tracing_v2_enabled
 from utils import get_prisma
 from openai import AsyncOpenAI
-from pydantic import BaseModel, validator
 import json
 import logging
 
@@ -30,13 +40,6 @@ pc = Pinecone(
 )
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# Constants
-CHAT_INDEX_NAME = "chatgenius-messages"
-SUMMARY_NAMESPACE = "document_summaries"
-DOCUMENT_NAMESPACE = "documents"
-SUMMARY_THRESHOLD = 0.3
-DEFAULT_TOP_K = 5
 
 class VectorStoreManager:
     def __init__(self):
@@ -119,36 +122,36 @@ class QueryAnalyzer:
 
 class FilterBuilder:
     @staticmethod
-    def build_filter(channel_type: str, channel_id: str = None, target_username: str = None) -> Dict:
-        """Build filter dictionary based on channel type and user access."""
+    def build_filter(channel_type: str, channel_id: str = None, user_id: str = None) -> Dict:
+        """Build filter dictionary based on channel type and user access.
+        
+        Cases:
+        1. Public/Private Channel: Only messages from that specific channel
+        2. DM Channel: Messages from specific user
+        3. Assistant Channel: User's messages + all public channel messages
+        """
         filter_dict = {}
         
-        if channel_type == "assistant":
+        if channel_type in [CHANNEL_TYPES['PUBLIC'], CHANNEL_TYPES['PRIVATE']]:
+            # Case 1: Public/Private Channel - strict channel_id filtering
+            filter_dict["channel_id"] = channel_id
+            
+        elif channel_type == CHANNEL_TYPES['DM']:
+            # Case 2: DM Channel - filter by user_id
+            filter_dict = {
+                "channel_type": CHANNEL_TYPES['DM'],
+                "user_id": user_id
+            }
+            
+        elif channel_type == CHANNEL_TYPES['ASSISTANT']:
+            # Case 3: Assistant Channel - user's messages + public channels
             filter_dict = {
                 "$or": [
-                    {"channel_type": "public"},
-                    {"channel_type": "private"}
+                    {"user_id": user_id},  # User's messages
+                    {"channel_type": CHANNEL_TYPES['PUBLIC']}  # All public messages
                 ]
             }
-        elif channel_type == "private":
-            filter_dict = {
-                "$or": [
-                    {"channel_type": "public"},
-                    {"channel_id": channel_id}
-                ]
-            }
-        else:
-            filter_dict = {
-                "channel_type": "public"
-            }
-
-        if target_username:
-            if "$or" in filter_dict:
-                for condition in filter_dict["$or"]:
-                    condition["sender_name"] = target_username
-            else:
-                filter_dict["sender_name"] = target_username
-
+        
         return filter_dict
 
 class ResultFormatter:
@@ -193,31 +196,6 @@ class ResultFormatter:
             logging.error(f"Error formatting document result: {str(e)}")
             return None
 
-class VectorUpdateRequest(BaseModel):
-    channel_id: str
-    channel_type: str
-    user_id: str
-    content: str
-    sender_name: str
-
-    @validator('channel_type')
-    def validate_channel_type(cls, v):
-        valid_types = ['dm', 'public', 'private', 'assistant']
-        if v not in valid_types:
-            raise ValueError(f'channel_type must be one of: {valid_types}')
-        return v
-
-class UserMessagesRequest(BaseModel):
-    user_id: str
-    top_k: int = 100
-    query: Optional[str] = ""  # Optional query for filtering messages
-    sender_name: Optional[str] = None  # Optional sender name for additional filtering
-
-class ChannelMessagesRequest(BaseModel):
-    channel_id: str
-    query: str
-    top_k: int = 100
-
 # Initialize managers and services
 vector_store_manager = VectorStoreManager()
 query_analyzer = QueryAnalyzer(openai_client)
@@ -248,7 +226,7 @@ async def retrieve_similar_messages(request: RetrieveRequest):
             filter_dict = FilterBuilder.build_filter(
                 request.channel_type,
                 request.channel_id,
-                target_username if is_user_specific else None
+                request.user_id if is_user_specific else None
             )
             
             # Search for relevant content
@@ -257,7 +235,8 @@ async def retrieve_similar_messages(request: RetrieveRequest):
                 request.top_k,
                 filter_dict
             )
-            
+
+        
             summary_results = await vector_store_manager.search_document_summaries(request.query)
             
             # Process results
@@ -286,7 +265,7 @@ async def retrieve_similar_messages(request: RetrieveRequest):
             
             # Sort results by similarity
             messages.sort(key=lambda x: x.similarity, reverse=True)
-            
+
             return RetrieveResponse(
                 query=request.query,
                 messages=messages
@@ -443,6 +422,7 @@ async def get_index_stats():
         logging.error(f"Error getting index stats: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Used for summarization and channel-specific search
 @router.post("/retrieve/channel", response_model=RetrieveResponse)
 async def retrieve_similar_channel_messages(request: ChannelMessagesRequest):
     """Retrieve messages from a specific channel."""
@@ -450,11 +430,13 @@ async def retrieve_similar_channel_messages(request: ChannelMessagesRequest):
         with tracing_v2_enabled():
             logging.info(f"Retrieving messages for channel: {request.channel_id}")
             
-            # Build filter for channel-specific search
-            filter_dict = {
-                "channel_id": request.channel_id
-            }
             
+            # Use FilterBuilder for consistent filtering
+            filter_dict = FilterBuilder.build_filter(
+                channel_id=request.channel_id,
+                channel_type="public"
+            )
+
             # Search for content
             chat_results = await vector_store_manager.search_chat_messages(
                 request.query,
@@ -477,6 +459,7 @@ async def retrieve_similar_channel_messages(request: ChannelMessagesRequest):
         logging.error(f"Error retrieving channel messages: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Used for offline DMs
 @router.post("/retrieve/user", response_model=RetrieveResponse)
 async def retrieve_similar_user_messages(request: UserMessagesRequest):
     """Retrieve messages from a specific user."""
@@ -484,23 +467,21 @@ async def retrieve_similar_user_messages(request: UserMessagesRequest):
         with tracing_v2_enabled():
             logging.info(f"Retrieving messages for user: {request.user_id}")
             
-            # Build filter for user-specific search
-            filter_dict = {
-                "user_id": request.user_id
-            }
-            
+            # Use FilterBuilder for consistent filtering
+            filter_dict = {"user_id": request.user_id}
+
             # Add sender name filter if provided
             if request.sender_name:
                 filter_dict["sender_name"] = request.sender_name
             
-            # Search for content - use empty query if none provided
+            # Search for content
             chat_results = await vector_store_manager.search_chat_messages(
                 request.query,  # Use provided query or empty string
                 request.top_k,
                 filter_dict
             )
-            
-            # Process results - don't filter by threshold since we want all messages
+
+            # Process results
             messages = []
             for doc, score in chat_results:
                 if msg := ResultFormatter.format_chat_result(doc, score):

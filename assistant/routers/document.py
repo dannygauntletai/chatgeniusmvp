@@ -127,7 +127,6 @@ async def process_summary(raw_documents: List[Document], file_id: str, file_name
 async def process_document(request: ProcessDocumentRequest):
     """Process a document by splitting into chunks and generating a summary."""
     try:
-        print(f"\n=== Processing document: {request.file_name} ===")
         
         # Download file content
         async with httpx.AsyncClient() as client:

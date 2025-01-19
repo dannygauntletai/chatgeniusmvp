@@ -3,7 +3,8 @@ from typing import List, Dict, Any, Optional
 import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from models import AssistantResponse, Message, RetrieveRequest, RichContent, RetrieveResponse
+from constants import MODEL_NAME, MAX_TOKENS, MAX_CONTEXT_TOKENS, MAX_CHUNK_TOKENS, TEMPERATURE, SIMILARITY_THRESHOLD, TOP_K
+from models import AssistantResponse, Message, RetrieveRequest, RichContent
 from routers.vector import retrieve_similar_user_messages, retrieve_similar_channel_messages, UserMessagesRequest, ChannelMessagesRequest, retrieve_similar_messages
 from utils import get_prisma
 from clients.phone_client import PhoneServiceClient
@@ -16,16 +17,8 @@ load_dotenv()
 # Initialize router
 router = APIRouter()
 
-# Constants
-ASSISTANT_BOT_USER_ID = os.getenv("ASSISTANT_BOT_USER_ID", "assistant-bot")
-ASSISTANT_SERVICE_URL = os.getenv("ASSISTANT_SERVICE_URL", "http://localhost:8000")
-MODEL_NAME = "gpt-4-turbo-preview"
-MAX_TOKENS = 1024  # Response token limit
-MAX_CONTEXT_TOKENS = 8192  # Increased for detailed document analysis
-MAX_CHUNK_TOKENS = 512  # Increased for larger document chunks
-TEMPERATURE = 0.7
-SIMILARITY_THRESHOLD = 0.3  # More lenient similarity threshold for document retrieval
-TOP_K = 10  # Increased to get more context from documents
+# Initialize components
+openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 class AssistantManager:
     def __init__(self, client: AsyncOpenAI):
@@ -233,45 +226,6 @@ Important guidelines:
                 logging.error(f"Traceback: {''.join(traceback.format_tb(e.__traceback__))}")
             raise
 
-class FilterBuilder:
-    @staticmethod
-    def build_filter(channel_type: str, channel_id: str = None, target_username: str = None, user_id: str = None) -> Dict:
-        """Build filter dictionary based on channel type and user access."""
-        filter_dict = {}
-        
-        if channel_type == "user_query":
-            # For user-specific queries, only get messages from that user
-            filter_dict = {
-                "user_id": user_id
-            }
-        elif channel_type == "assistant":
-            filter_dict = {
-                "$or": [
-                    {"channel_type": "public"},
-                    {"channel_type": "private"}
-                ]
-            }
-        elif channel_type == "private":
-            filter_dict = {
-                "$or": [
-                    {"channel_type": "public"},
-                    {"channel_id": channel_id}
-                ]
-            }
-        else:
-            filter_dict = {
-                "channel_type": "public"
-            }
-
-        if target_username and channel_type != "user_query":
-            if "$or" in filter_dict:
-                for condition in filter_dict["$or"]:
-                    condition["sender_name"] = target_username
-            else:
-                filter_dict["sender_name"] = target_username
-
-        return filter_dict
-
 class OfflineRequest(BaseModel):
     query: str
     sender_name: Optional[str] = None
@@ -338,6 +292,9 @@ async def chat(
             )
         )
 
+        channel_set = set()
+        for msg in retrieve_response.messages:
+            channel_set.add(msg.channel_name)
         # Build context with metadata from the most recent relevant message
         channel_info = None
         if retrieve_response.messages:
@@ -351,7 +308,7 @@ async def chat(
         context = f"""You are ChatGenius, a helpful AI assistant. You help users by providing accurate and relevant information based on the conversation history.
 
 Current conversation metadata:
-- Channel: #{channel_info["name"] if channel_info else 'unknown'} ({channel_id})
+- Channel name: #{channel_info["name"] if channel_info else 'unknown'} ({channel_id})
 - Channel type: {channel_info["type"] if channel_info else channel_type}
 - Current user: @{username} ({user_id})
 
@@ -364,7 +321,7 @@ Be direct and helpful in your responses. You can reference the channel and user 
         if retrieve_response.messages:
             context += "Here are some relevant previous messages and documents that might help with context:\n"
             for msg in retrieve_response.messages[:TOP_K]:
-                if hasattr(msg, "metadata") and msg.metadata.get("file_name"):
+                if hasattr(msg, "metadata") and hasattr(msg.metadata, "file_name") and msg.metadata.get("file_name"):
                     context += f"[From document '{msg.metadata.get('file_name')}' chunk {msg.metadata.get('chunk_index', 'unknown')}]: {msg.content}\n"
                 else:
                     context += f"[From #{msg.channel_name} by @{msg.sender_name}]: {msg.content}\n"
@@ -399,10 +356,10 @@ Be direct and helpful in your responses. You can reference the channel and user 
             "type": "message",
             # Add document metadata if it exists
             "document": {
-                "file_name": msg.metadata.get("file_name") if hasattr(msg, "metadata") else None,
+                "file_name": msg.metadata.get("file_name") if hasattr(msg, "metadata") and hasattr(msg.metadata, "file_name") else None,
                 "file_id": msg.metadata.get("file_id") if hasattr(msg, "metadata") else None,
                 "chunk_index": msg.metadata.get("chunk_index") if hasattr(msg, "metadata") else None
-            } if hasattr(msg, "metadata") and msg.metadata.get("file_name") else None
+            } if hasattr(msg, "metadata") and hasattr(msg.metadata, "file_name") and msg.metadata.get("file_name") else None
         } for msg in retrieve_response.messages]
         
         return AssistantResponse(
@@ -436,14 +393,14 @@ Be direct and helpful in your responses. You can reference the channel and user 
 
 @router.post("/call-status")
 async def c(
-    request: Request,
+    _request: Request,
     CallSid: str = Body(...),
     CallStatus: str = Body(None),
     RecordingSid: str = Body(None),
     RecordingUrl: str = Body(None),
     RecordingDuration: int = Body(None),
     RecordingStatus: str = Body(None),
-    AccountSid: str = Body(None),
+    _AccountSid: str = Body(None),
     ChannelId: str = Body(None),
     UserId: str = Body(None)
 ):
@@ -535,12 +492,9 @@ async def get_offline_user_messages(
     """Retrieve and analyze messages from a specific offline user."""
     try:
         # Get messages from vector store with user-specific filter
-        print("user_id", user_id)
         retrieve_response = await retrieve_similar_user_messages(
             UserMessagesRequest(user_id=user_id, top_k=request.limit)
         )
-
-        print(retrieve_response)
 
         if not retrieve_response.messages:
             return AssistantResponse(
@@ -575,7 +529,9 @@ Important:
 2. Focus on patterns, preferences, and communication style
 3. If answering a specific question, cite relevant messages
 4. Don't apologize or mention being an AI - just provide the information
-5. If the context seems insufficient, mention what additional information would be helpful"""
+5. If the context seems insufficient, mention what additional information would be helpful
+6. Do NOT mention the user's username in your response or the context to your message. Just generate a response that will be sent to the other user.
+"""
                 }
             ],
             temperature=0.3,  # Lower temperature for more factual responses
